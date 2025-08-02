@@ -1,0 +1,52 @@
+# Visual Studio build directories
+bin/
+obj/
+Debug/
+Release/
+Output/
+publish/
+
+# NuGet packages
+packages/
+*.nupkg
+
+# Visual Studio temporary files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+*.cache
+
+# Visual Studio Code files
+.vs/
+
+# IDE specific files
+*.pdb
+*.ncrunch*
+*.ncrunchproj.*
+
+# Rider specific files
+*.DotSettings.user
+
+# Publish files
+*.pubxml
+*.pubxml.user
+
+# Rider .NET Core Temp files
+*.csproj.DotSettings.user
+
+# .NET symbols
+*.pdb
+
+# MacOS specific
+.DS_Store
+
+# Console and logs
+*.log
+*.log.txt
+
+*.exe
+
+# Test results
+TestResult.xml
