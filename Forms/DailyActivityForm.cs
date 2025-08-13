@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Windows.Forms;
 using Microsoft.Win32;
 using ClosedXML.Excel;
+using AdinersDailyActivityApp.Forms;
 
 namespace AdinersDailyActivityApp
 {
@@ -125,13 +126,55 @@ namespace AdinersDailyActivityApp
             this.ShowInTaskbar = false;
             this.KeyDown += Form1_KeyDown;
 
+            // Create a TableLayoutPanel for layout
+            var mainLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                RowCount = 4,
+                ColumnCount = 1,
+                Padding = new Padding(20), // Keep padding consistent
+                BackColor = Color.Black // Match form background
+            };
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 100)); // For logo
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));  // For title
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));  // For text input
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // For history list
+
+            // Configure logoPictureBox
             logoPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
-            logoPictureBox.Size = new Size(200, 60);
+            logoPictureBox.Size = new Size(200, 60); // Initial size, will be scaled by Dock.Fill
             logoPictureBox.Dock = DockStyle.Fill;
             LoadLogoImage();
+            mainLayout.Controls.Add(logoPictureBox, 0, 0); // Add to first row, first column
 
+            // Configure lblTitle
             lblTitle.Text = "What are you working on?";
             lblTitle.Font = new Font("Arial", 24, FontStyle.Italic);
+            lblTitle.ForeColor = Color.White; // Set text color for visibility
+            lblTitle.TextAlign = ContentAlignment.MiddleCenter;
+            lblTitle.Dock = DockStyle.Fill;
+            mainLayout.Controls.Add(lblTitle, 0, 1); // Add to second row
+
+            // Configure txtActivity
+            txtActivity.Font = new Font("Segoe UI", 16);
+            txtActivity.BackColor = Color.DarkGray; // Changed for better visibility
+            txtActivity.ForeColor = Color.White;
+            txtActivity.BorderStyle = BorderStyle.FixedSingle;
+            txtActivity.Dock = DockStyle.Fill;
+            mainLayout.Controls.Add(txtActivity, 0, 2); // Add to third row
+
+            // Configure lstActivityHistory
+            lstActivityHistory.Font = new Font("Segoe UI", 12);
+            lstActivityHistory.BackColor = Color.DarkGray; // Changed for better visibility
+            lstActivityHistory.ForeColor = Color.White;
+            lstActivityHistory.BorderStyle = BorderStyle.FixedSingle;
+            lstActivityHistory.Dock = DockStyle.Fill;
+            mainLayout.Controls.Add(lstActivityHistory, 0, 3); // Add to fourth row
+            lstActivityHistory.MouseDoubleClick += LstActivityHistory_MouseDoubleClick; // Add double-click event handler
+
+            // Add the TableLayoutPanel to the form
+            this.Controls.Add(mainLayout);
         }
 
         #endregion
@@ -145,9 +188,50 @@ namespace AdinersDailyActivityApp
                 this.WindowState = FormWindowState.Minimized;
             }
 
-            if (e.Control && e.KeyCode == Keys.Enter)
+            if (e.KeyCode == Keys.Enter) // Changed to only Enter key
             {
                 SaveActivity();
+                e.Handled = true; // Mark the event as handled to prevent further processing
+                e.SuppressKeyPress = true; // Suppress the key press to prevent a 'ding' sound
+            }
+            else if (e.Control && e.KeyCode == Keys.Enter) // Keep Control + Enter as an alternative
+            {
+                SaveActivity();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+        }
+
+        private void LstActivityHistory_MouseDoubleClick(object sender, MouseEventArgs e)
+        {
+            if (lstActivityHistory.SelectedItem != null)
+            {
+                string selectedItemText = lstActivityHistory.SelectedItem.ToString();
+                int closingBracketIndex = selectedItemText.IndexOf(']');
+                if (closingBracketIndex != -1 && closingBracketIndex + 1 < selectedItemText.Length)
+                {
+                    // Find the first non-space character after the closing bracket
+                    int startIndex = closingBracketIndex + 1;
+                    while (startIndex < selectedItemText.Length && char.IsWhiteSpace(selectedItemText[startIndex]))
+                    {
+                        startIndex++;
+                    }
+
+                    if (startIndex < selectedItemText.Length)
+                    {
+                        txtActivity.Text = selectedItemText.Substring(startIndex).Trim();
+                    }
+                    else
+                    {
+                        // Fallback if only timestamp and spaces are present
+                        txtActivity.Text = string.Empty;
+                    }
+                }
+                else
+                {
+                    // Fallback if format is unexpected (no closing bracket or too short)
+                    txtActivity.Text = selectedItemText.Trim();
+                }
             }
         }
 
@@ -175,11 +259,11 @@ namespace AdinersDailyActivityApp
 
         private void OnSetIntervalClicked(object sender, EventArgs e)
         {
-            using (var setIntervalForm = new SetIntervalForm(config.IntervalHours))
+            using (var setIntervalForm = new SetIntervalDialog(config.IntervalHours))
             {
                 if (setIntervalForm.ShowDialog() == DialogResult.OK)
                 {
-                    config.IntervalHours = setIntervalForm.IntervalHours;
+                    config.IntervalHours = setIntervalForm.IntervalMinutes;
                     config.Save();
                     LoadConfig();
                 }
@@ -405,6 +489,32 @@ namespace AdinersDailyActivityApp
                     isLunchHandled = true;
                         ShowFullScreenInput();
                 }
+            }
+        }
+
+        #endregion
+
+        #region Private Methods
+
+        private void StartTimer()
+        {
+            popupTimer.Interval = popupIntervalInMinutes * 60 * 1000; // Convert minutes to milliseconds
+            popupTimer.Tick += popupTimer_Tick;
+            popupTimer.Start();
+        }
+
+        private void LoadLogoImage()
+        {
+            string logoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "logo.png");
+            if (File.Exists(logoPath))
+            {
+                logoPictureBox.Image = Image.FromFile(logoPath);
+            }
+            else
+            {
+                // Fallback or error handling if logo not found
+                // For now, just set it to null or a default image
+                logoPictureBox.Image = null;
             }
         }
 
