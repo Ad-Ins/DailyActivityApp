@@ -9,131 +9,85 @@ namespace AdinersDailyActivityApp.Forms
         public int IntervalMinutes { get; private set; }
 
         private NumericUpDown numInterval;
-        private Label lblError;
+        private Button btnOk;
+        private Button btnCancel;
 
-        public SetIntervalDialog(int currentInterval)
+        public SetIntervalDialog(int currentIntervalMinutes)
         {
-            this.Text = "Set Interval";
+            this.Text = "Set Popup Interval";
+            this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
-            this.StartPosition = FormStartPosition.CenterParent;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
-            this.BackColor = Color.FromArgb(24, 24, 32);
-            this.Width = 420;
-            this.Height = 220;
+            this.BackColor = Color.FromArgb(25, 25, 25);
+            this.ForeColor = Color.White;
+            this.Size = new Size(300, 180);
 
-            var layout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                RowCount = 4,
-                ColumnCount = 2,
-                Padding = new Padding(32, 24, 32, 24),
-                BackColor = this.BackColor
-            };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50)); // Ubah dari 60 ke 50 agar tidak terlalu turun
-
-            Font labelFont = new Font("Segoe UI", 14F, FontStyle.Bold);
-            Font inputFont = new Font("Segoe UI", 14F, FontStyle.Regular);
-            Color labelColor = Color.WhiteSmoke;
-            Color inputBack = Color.FromArgb(36, 36, 48);
-            Color inputFore = Color.White;
-
-            var lblInterval = new Label
+            Label lblInfo = new Label
             {
                 Text = "Interval (minutes):",
-                Font = labelFont,
-                ForeColor = labelColor,
-                BackColor = this.BackColor,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Dock = DockStyle.Fill
+                ForeColor = Color.White,
+                Location = new Point(20, 20),
+                AutoSize = true
             };
+
             numInterval = new NumericUpDown
             {
                 Minimum = 1,
-                Maximum = 480,
-                Value = currentInterval,
-                Font = inputFont,
-                BackColor = inputBack,
-                ForeColor = inputFore,
-                BorderStyle = BorderStyle.FixedSingle,
-                Dock = DockStyle.Fill
+                Maximum = 720, // 12 jam max
+                Value = currentIntervalMinutes > 0 ? currentIntervalMinutes : 60,
+                Location = new Point(150, 18),
+                Width = 100,
+                BackColor = Color.FromArgb(40, 40, 40),
+                ForeColor = Color.White,
+                BorderStyle = BorderStyle.FixedSingle
             };
 
-            lblError = new Label
-            {
-                ForeColor = Color.OrangeRed,
-                Text = "",
-                Font = new Font("Segoe UI", 11F, FontStyle.Italic),
-                BackColor = this.BackColor,
-                Dock = DockStyle.Fill,
-                Height = 24,
-                TextAlign = ContentAlignment.MiddleCenter
-            };
-
-            var btnPanel = new FlowLayoutPanel
-            {
-                FlowDirection = FlowDirection.RightToLeft,
-                Dock = DockStyle.Right,
-                Padding = new Padding(0, 0, 0, 0),
-                BackColor = this.BackColor,
-                Height = 44
-            };
-            var btnOK = new Button
+            btnOk = new Button
             {
                 Text = "OK",
-                Width = 100,
-                Height = 38,
                 DialogResult = DialogResult.OK,
+                Location = new Point(50, 90),
                 FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(70, 130, 180),
+                BackColor = Color.FromArgb(50, 50, 50),
                 ForeColor = Color.White,
-                Font = new Font("Segoe UI", 14F, FontStyle.Bold)
+                Width = 80
             };
-            btnOK.FlatAppearance.BorderSize = 0;
+            btnOk.FlatAppearance.BorderSize = 0;
 
-            var btnCancel = new Button
+            btnCancel = new Button
             {
                 Text = "Cancel",
-                Width = 100,
-                Height = 38,
                 DialogResult = DialogResult.Cancel,
+                Location = new Point(150, 90),
                 FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(60, 60, 70),
+                BackColor = Color.FromArgb(50, 50, 50),
                 ForeColor = Color.White,
-                Font = new Font("Segoe UI", 14F, FontStyle.Bold)
+                Width = 80
             };
             btnCancel.FlatAppearance.BorderSize = 0;
 
-            btnPanel.Controls.Add(btnOK);
-            btnPanel.Controls.Add(btnCancel);
+            this.Controls.Add(lblInfo);
+            this.Controls.Add(numInterval);
+            this.Controls.Add(btnOk);
+            this.Controls.Add(btnCancel);
 
-            layout.Controls.Add(lblInterval, 0, 0);
-            layout.Controls.Add(numInterval, 1, 0);
-            layout.Controls.Add(lblError, 0, 1);
-            layout.SetColumnSpan(lblError, 2);
-            // Pindahkan btnPanel ke baris ke-2 kolom ke-1 (kanan), agar tombol selalu rata kanan dan tidak turun
-            layout.Controls.Add(btnPanel, 1, 2);
-
-            this.Controls.Add(layout);
-            this.AcceptButton = btnOK;
+            this.AcceptButton = btnOk;
             this.CancelButton = btnCancel;
+        }
 
-            btnOK.Click += (s, e) =>
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            base.OnFormClosing(e);
+            if (this.DialogResult == DialogResult.OK)
             {
-                if (numInterval.Value < 1)
-                {
-                    lblError.Text = "Interval minimal 1 menit.";
-                    this.DialogResult = DialogResult.None;
-                    return;
-                }
-                lblError.Text = "";
                 IntervalMinutes = (int)numInterval.Value;
-            };
+                if (IntervalMinutes <= 0)
+                {
+                    MessageBox.Show("Interval must be greater than 0.", "Invalid Interval");
+                    e.Cancel = true;
+                }
+            }
         }
     }
 }

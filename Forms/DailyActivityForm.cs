@@ -1,5 +1,4 @@
-﻿
-using System;
+﻿using System;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
@@ -15,7 +14,6 @@ namespace AdinersDailyActivityApp
     public class DailyActivityForm : Form
     {
         #region Fields
-
         private Label lblTitle;
         private TextBox txtActivity;
         private ListBox lstActivityHistory;
@@ -23,80 +21,52 @@ namespace AdinersDailyActivityApp
         private System.Windows.Forms.Timer popupTimer;
         private NotifyIcon trayIcon;
         private ContextMenuStrip trayMenu;
-        //private ComboBox cmbActivityType;
         private ContextMenuStrip historyContextMenu;
-
         private DateTime appStartTime;
         private DateTime popupTime;
         private int popupIntervalInMinutes;
         private AppConfig config;
-
         private bool isLunchPopupShown = false;
         private bool isLunchHandled = false;
         private DateTime lastActivityInputTime = DateTime.MinValue;
-
         #endregion
-
         #region Constructor
-
         public DailyActivityForm(DateTime appStartTime, DateTime popupTime)
         {
             this.appStartTime = appStartTime;
             this.popupTime = popupTime;
-
             InitializeComponent();
             SetupForm();
             LoadConfig();
             StartTimer();
             LoadLogHistory();
-
             SystemEvents.SessionEnding += SystemEvents_SessionEnding;
         }
-
         #endregion
-
         #region Initialization
-
         private void LoadConfig()
         {
             config = AppConfig.Load();
             popupIntervalInMinutes = config.IntervalHours * 60;
         }
-
         private void InitializeComponent()
         {
-            // Inisialisasi komponen UI
             lblTitle = new Label();
             txtActivity = new TextBox();
             lstActivityHistory = new ListBox();
             logoPictureBox = new PictureBox();
             popupTimer = new System.Windows.Forms.Timer();
-
-            // ComboBox tipe activity
-//             //cmbActivityType = new ComboBox
-           // {
-            //    Font = new Font("Segoe UI", 16),
-            //    DropDownStyle = ComboBoxStyle.DropDownList,
-            //    Width = 180,
-            //    Dock = DockStyle.Left,
-            //    Margin = new Padding(0, 20, 0, 20)
-            //};
-//             //cmbActivityType.Items.AddRange(new object[] { "NON-JIRA", "Others", "JIRA-001" });
-//             //cmbActivityType.SelectedIndex = 0;
-
             // Tray menu
             trayMenu = new ContextMenuStrip();
+            trayMenu.BackColor = Color.FromArgb(30, 30, 30);
+            trayMenu.ForeColor = Color.White;
             trayMenu.Items.Add("Input Activity Now", null, OnInputNowClicked);
-            trayMenu.Items.Add("Export Log to Excel", null, OnExportLogClicked); 
+            trayMenu.Items.Add("Export Log to Excel", null, OnExportLogClicked);
             trayMenu.Items.Add("Set Interval...", null, OnSetIntervalClicked);
-            // trayMenu.Items.Add("SIT/UAT Jira Connection...", null, OnJiraConnectionClicked);
-            trayMenu.Items.Add("-"); // Separator
-            trayMenu.Items.Add("Test Tray", null, OnTestTrayClicked);
+            trayMenu.Items.Add("-");
             trayMenu.Items.Add("Exit", null, OnExitClicked);
-
             string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "logo.ico");
-            Icon trayAppIcon = File.Exists(iconPath) ? new Icon(iconPath) : SystemIcons.Application;
-
+            Icon trayAppIcon = File.Exists(iconPath) ? MakeIconWhite(new Icon(iconPath)) : SystemIcons.Application;
             trayIcon = new NotifyIcon
             {
                 Text = "Adiners - Daily Activity",
@@ -105,103 +75,80 @@ namespace AdinersDailyActivityApp
                 Visible = true
             };
             trayIcon.DoubleClick += (s, e) => ShowFullScreenInput();
-
             // History context menu
             historyContextMenu = new ContextMenuStrip();
+            historyContextMenu.BackColor = Color.FromArgb(30, 30, 30);
+            historyContextMenu.ForeColor = Color.White;
             historyContextMenu.Items.Add("Edit", null, OnEditHistoryClicked);
-
-            // List activity history
             lstActivityHistory.ContextMenuStrip = historyContextMenu;
         }
-
         private void SetupForm()
         {
-            // Pengaturan tampilan utama
             this.FormBorderStyle = FormBorderStyle.None;
             this.WindowState = FormWindowState.Maximized;
             this.TopMost = true;
-            this.BackColor = Color.Black;
-            this.Opacity = 0.9;
+            this.BackColor = Color.FromArgb(20, 20, 20);
+            this.Opacity = 0.95;
             this.KeyPreview = true;
             this.ShowInTaskbar = false;
             this.KeyDown += Form1_KeyDown;
-
-            // Create a TableLayoutPanel for layout
             var mainLayout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 RowCount = 4,
                 ColumnCount = 1,
-                Padding = new Padding(20), // Keep padding consistent
-                BackColor = Color.Black // Match form background
+                Padding = new Padding(20),
+                BackColor = Color.FromArgb(20, 20, 20)
             };
             mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 100)); // For logo
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));  // For title
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));  // For text input
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // For history list
-
-            // Configure logoPictureBox
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             logoPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
-            logoPictureBox.Size = new Size(200, 60); // Initial size, will be scaled by Dock.Fill
+            logoPictureBox.Size = new Size(200, 60);
             logoPictureBox.Dock = DockStyle.Fill;
             LoadLogoImage();
-            mainLayout.Controls.Add(logoPictureBox, 0, 0); // Add to first row, first column
-
-            // Configure lblTitle
+            mainLayout.Controls.Add(logoPictureBox, 0, 0);
             lblTitle.Text = "What are you working on?";
-            lblTitle.Font = new Font("Arial", 24, FontStyle.Italic);
-            lblTitle.ForeColor = Color.White; // Set text color for visibility
+            lblTitle.Font = new Font("Segoe UI", 24, FontStyle.Bold);
+            lblTitle.ForeColor = Color.White;
             lblTitle.TextAlign = ContentAlignment.MiddleCenter;
             lblTitle.Dock = DockStyle.Fill;
-            mainLayout.Controls.Add(lblTitle, 0, 1); // Add to second row
-
-            // Configure txtActivity
+            mainLayout.Controls.Add(lblTitle, 0, 1);
             txtActivity.Font = new Font("Segoe UI", 16);
-            txtActivity.BackColor = Color.DarkGray; // Changed for better visibility
+            txtActivity.BackColor = Color.FromArgb(40, 40, 40);
             txtActivity.ForeColor = Color.White;
             txtActivity.BorderStyle = BorderStyle.FixedSingle;
             txtActivity.Dock = DockStyle.Fill;
-            mainLayout.Controls.Add(txtActivity, 0, 2); // Add to third row
-
-            // Configure lstActivityHistory
+            txtActivity.Margin = new Padding(5);
+            mainLayout.Controls.Add(txtActivity, 0, 2);
             lstActivityHistory.Font = new Font("Segoe UI", 12);
-            lstActivityHistory.BackColor = Color.DarkGray; // Changed for better visibility
+            lstActivityHistory.BackColor = Color.FromArgb(35, 35, 35);
             lstActivityHistory.ForeColor = Color.White;
             lstActivityHistory.BorderStyle = BorderStyle.FixedSingle;
             lstActivityHistory.Dock = DockStyle.Fill;
-            mainLayout.Controls.Add(lstActivityHistory, 0, 3); // Add to fourth row
-            lstActivityHistory.MouseDoubleClick += LstActivityHistory_MouseDoubleClick; // Add double-click event handler
-
-            // Add the TableLayoutPanel to the form
+            lstActivityHistory.Margin = new Padding(5);
+            lstActivityHistory.MouseDoubleClick += LstActivityHistory_MouseDoubleClick;
+            mainLayout.Controls.Add(lstActivityHistory, 0, 3);
             this.Controls.Add(mainLayout);
+            this.Hide();
         }
-
         #endregion
-
         #region Event Handlers
-
         private void Form1_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Escape)
             {
-                this.WindowState = FormWindowState.Minimized;
+                this.Hide();
             }
-
-            if (e.KeyCode == Keys.Enter) // Changed to only Enter key
-            {
-                SaveActivity();
-                e.Handled = true; // Mark the event as handled to prevent further processing
-                e.SuppressKeyPress = true; // Suppress the key press to prevent a 'ding' sound
-            }
-            else if (e.Control && e.KeyCode == Keys.Enter) // Keep Control + Enter as an alternative
+            if (e.KeyCode == Keys.Enter || (e.Control && e.KeyCode == Keys.Enter))
             {
                 SaveActivity();
                 e.Handled = true;
                 e.SuppressKeyPress = true;
             }
         }
-
         private void LstActivityHistory_MouseDoubleClick(object sender, MouseEventArgs e)
         {
             if (lstActivityHistory.SelectedItem != null)
@@ -210,53 +157,57 @@ namespace AdinersDailyActivityApp
                 int closingBracketIndex = selectedItemText.IndexOf(']');
                 if (closingBracketIndex != -1 && closingBracketIndex + 1 < selectedItemText.Length)
                 {
-                    // Find the first non-space character after the closing bracket
                     int startIndex = closingBracketIndex + 1;
                     while (startIndex < selectedItemText.Length && char.IsWhiteSpace(selectedItemText[startIndex]))
-                    {
                         startIndex++;
-                    }
-
-                    if (startIndex < selectedItemText.Length)
-                    {
-                        txtActivity.Text = selectedItemText.Substring(startIndex).Trim();
-                    }
-                    else
-                    {
-                        // Fallback if only timestamp and spaces are present
-                        txtActivity.Text = string.Empty;
-                    }
+                    txtActivity.Text = (startIndex < selectedItemText.Length)
+                        ? selectedItemText.Substring(startIndex).Trim()
+                        : string.Empty;
                 }
                 else
                 {
-                    // Fallback if format is unexpected (no closing bracket or too short)
                     txtActivity.Text = selectedItemText.Trim();
                 }
             }
         }
-
         private void OnExitClicked(object sender, EventArgs e)
         {
-            // Bersihkan resources dan keluar dari aplikasi
             trayIcon.Visible = false;
             Application.Exit();
-        }
-        
-        private void OnTestTrayClicked(object sender, EventArgs e)
-        {
-            trayIcon.ShowBalloonTip(2000, "Tray Test", "Tray functionality is working properly", ToolTipIcon.Info);
         }
 
         private void OnInputNowClicked(object sender, EventArgs e)
         {
+            if ((DateTime.Now - lastActivityInputTime).TotalSeconds < 60 && lastActivityInputTime != DateTime.MinValue)
+            {
+                trayIcon.ShowBalloonTip(2000, "Cooldown", "Harus menunggu minimal 1 menit sebelum input activity baru.", ToolTipIcon.Info);
+                return;
+            }
             ShowFullScreenInput();
         }
-
         private void OnExportLogClicked(object sender, EventArgs e)
         {
-            ExportLogToExcel();
-        }
+            using (var exportDialog = new ExportDateRangeDialog())
+            {
+                if (exportDialog.ShowDialog() == DialogResult.OK)
+                {
+                    DateTime fromDate = exportDialog.FromDate;
+                    DateTime toDate = exportDialog.ToDate;
 
+                    using (SaveFileDialog saveFileDialog = new SaveFileDialog())
+                    {
+                        saveFileDialog.Filter = "Excel files (*.xlsx)|*.xlsx|All files (*.*)|*.*";
+                        saveFileDialog.Title = "Export Activity Log";
+                        saveFileDialog.FileName = "activity_log.xlsx";
+
+                        if (saveFileDialog.ShowDialog() == DialogResult.OK)
+                        {
+                            ExportLogToExcel(fromDate, toDate, saveFileDialog.FileName);
+                        }
+                    }
+                }
+            }
+        }
         private void OnSetIntervalClicked(object sender, EventArgs e)
         {
             using (var setIntervalForm = new SetIntervalDialog(config.IntervalHours))
@@ -266,134 +217,125 @@ namespace AdinersDailyActivityApp
                     config.IntervalHours = setIntervalForm.IntervalMinutes;
                     config.Save();
                     LoadConfig();
+                    StartTimer(); // refresh interval
                 }
             }
         }
-
-        private void OnJiraConnectionClicked(object sender, EventArgs e)
-        {
-            // TODO: Implement Jira connection settings form
-            MessageBox.Show("Jira connection settings will be implemented in a future version.", "Info");
-        }
-
         private void OnEditHistoryClicked(object sender, EventArgs e)
         {
             if (lstActivityHistory.SelectedItem != null)
             {
                 string selectedActivity = lstActivityHistory.SelectedItem.ToString();
                 txtActivity.Text = selectedActivity;
-                // Remove the selected item from the history list
                 lstActivityHistory.Items.Remove(selectedActivity);
-                // Remove the selected item from the log file
                 RemoveActivityFromLogFile(selectedActivity);
             }
         }
-
         private void popupTimer_Tick(object sender, EventArgs e)
         {
             DateTime now = DateTime.Now;
-
-            // Check for lunch popup
             if (!isLunchPopupShown && now.Hour == 12 && now.Minute >= 0 && now.Minute <= 15)
             {
                 ShowLunchPopup();
                 isLunchPopupShown = true;
                 isLunchHandled = false;
             }
-
-            // Reset lunch popup flag after 1 PM
             if (now.Hour > 13)
-            {
                 isLunchPopupShown = false;
-            }
-
-            // Regular activity popup
-            TimeSpan timeSinceStart = now - appStartTime;
             TimeSpan timeSinceLastPopup = now - popupTime;
-
             if (timeSinceLastPopup.TotalMinutes >= popupIntervalInMinutes && now.Hour >= 9 && now.Hour <= 17)
             {
                 ShowFullScreenInput();
                 popupTime = DateTime.Now;
             }
         }
-
-        private void SystemEvents_SessionEnding(object sender, SessionEndingEventArgs e)
-        {
-            // Save the activity before the session ends
-            SaveActivity();
-        }
-
+        private void SystemEvents_SessionEnding(object sender, SessionEndingEventArgs e) => SaveActivity();
         #endregion
-
         #region Methods
-
         private void ShowFullScreenInput()
         {
-            // Reset the activity input
+            if ((DateTime.Now - lastActivityInputTime).TotalSeconds < 60 && lastActivityInputTime != DateTime.MinValue)
+            {
+                // Masih cooldown → jangan tampilkan form
+                this.Hide();
+                return;
+            }
             txtActivity.Text = "";
             txtActivity.Focus();
-
-            // Show the form in full screen
             this.WindowState = FormWindowState.Maximized;
             this.Show();
             this.BringToFront();
             this.Activate();
         }
-
         private void SaveActivity()
         {
             string activity = txtActivity.Text.Trim();
-
             if (!string.IsNullOrEmpty(activity))
             {
                 string logEntry = $"[{DateTime.Now.ToString(CultureInfo.InvariantCulture)}] {activity}";
-
-                // Save to log file
                 string logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "activity_log.txt");
                 File.AppendAllText(logFilePath, logEntry + Environment.NewLine);
-
-                // Update activity history
                 LoadLogHistory();
-
-                // Reset last activity input time
                 lastActivityInputTime = DateTime.Now;
             }
-
-            // Minimize the form after saving
-            this.WindowState = FormWindowState.Minimized;
+            this.Hide();
         }
-
+        private string FormatLogEntry(DateTime time, string activity, DateTime? prevTime)
+        {
+            string formattedTime = time.ToString("dd/MM/yyyy - HH:mm", CultureInfo.InvariantCulture);
+            string durationStr = "";
+            if (prevTime.HasValue)
+            {
+                int minutes = (int)(time - prevTime.Value).TotalMinutes;
+                if (minutes < 0) minutes = 0;
+                durationStr = $" - {minutes} menit";
+            }
+            return $"[{formattedTime}{durationStr}] {activity}";
+        }
         private void LoadLogHistory()
         {
             lstActivityHistory.Items.Clear();
-
             string logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "activity_log.txt");
             if (File.Exists(logFilePath))
             {
                 string[] lines = File.ReadAllLines(logFilePath);
-                // Display the log in reverse chronological order
+                DateTime? prevTime = null;
                 foreach (string line in lines.Reverse())
                 {
-                    lstActivityHistory.Items.Add(line);
+                    int timestampEndIndex = line.IndexOf(']');
+                    if (timestampEndIndex > 0)
+                    {
+                        string timestampStr = line.Substring(1, timestampEndIndex - 1);
+                        if (DateTime.TryParse(timestampStr, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime time))
+                        {
+                            string activity = line.Substring(timestampEndIndex + 2);
+                            string display = FormatLogEntry(time, activity, prevTime);
+                            lstActivityHistory.Items.Add(display);
+                            prevTime = time;
+                        }
+                        else
+                        {
+                            lstActivityHistory.Items.Add(line);
+                        }
+                    }
+                    else
+                    {
+                        lstActivityHistory.Items.Add(line);
+                    }
                 }
             }
         }
-
         private void RemoveActivityFromLogFile(string activityToRemove)
         {
             string logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "activity_log.txt");
             if (File.Exists(logFilePath))
             {
                 string[] lines = File.ReadAllLines(logFilePath);
-                // Filter out the line containing the activity to remove
-                var filteredLines = lines.Where(line => line != activityToRemove);
-                // Write the filtered lines back to the log file
+                var filteredLines = lines.Where(line => !line.Trim().Equals(activityToRemove.Trim(), StringComparison.OrdinalIgnoreCase));
                 File.WriteAllLines(logFilePath, filteredLines);
             }
         }
-
-        private void ExportLogToExcel()
+        private void ExportLogToExcel(DateTime fromDate, DateTime toDate, string filePath)
         {
             string logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "activity_log.txt");
             if (!File.Exists(logFilePath))
@@ -401,42 +343,31 @@ namespace AdinersDailyActivityApp
                 MessageBox.Show("No activity log found.", "Error");
                 return;
             }
-
-            // Create a new Excel workbook
             using (var workbook = new XLWorkbook())
             {
                 var worksheet = workbook.Worksheets.Add("Activity Log");
-
-                // Add headers
                 worksheet.Cell(1, 1).Value = "Timestamp";
                 worksheet.Cell(1, 2).Value = "Activity";
-
-                // Read activity log
                 string[] lines = File.ReadAllLines(logFilePath);
-
-                // Populate data
-                for (int i = 0; i < lines.Length; i++)
+                int rowIndex = 2;
+                foreach (string line in lines)
                 {
-                    string line = lines[i];
-                    // Split the log entry into timestamp and activity
                     int timestampEndIndex = line.IndexOf(']');
                     if (timestampEndIndex > 0 && timestampEndIndex + 2 < line.Length)
                     {
-                        string timestamp = line.Substring(1, timestampEndIndex - 1);
-                        string activity = line.Substring(timestampEndIndex + 2);
-
-                        worksheet.Cell(i + 2, 1).Value = timestamp;
-                        worksheet.Cell(i + 2, 2).Value = activity;
-                    }
-                    else
-                    {
-                        // If the log entry format is incorrect, put the whole line in the activity column
-                        worksheet.Cell(i + 2, 2).Value = line;
+                        string timestampStr = line.Substring(1, timestampEndIndex - 1);
+                        if (DateTime.TryParse(timestampStr, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime timestamp))
+                        {
+                            if (timestamp.Date >= fromDate.Date && timestamp.Date <= toDate.Date)
+                            {
+                                string activity = line.Substring(timestampEndIndex + 2);
+                                worksheet.Cell(rowIndex, 1).Value = timestampStr;
+                                worksheet.Cell(rowIndex, 2).Value = activity;
+                                rowIndex++;
+                            }
+                        }
                     }
                 }
-
-                // Save the Excel file
-                string filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "activity_log.xlsx");
                 try
                 {
                     workbook.SaveAs(filePath);
@@ -448,7 +379,6 @@ namespace AdinersDailyActivityApp
                 }
             }
         }
-
         private void ShowLunchPopup()
         {
             if (!isLunchHandled)
@@ -461,63 +391,184 @@ namespace AdinersDailyActivityApp
                     StartPosition = FormStartPosition.CenterScreen,
                     FormBorderStyle = FormBorderStyle.FixedDialog,
                     MaximizeBox = false,
-                    MinimizeBox = false
+                    MinimizeBox = false,
+                    BackColor = Color.FromArgb(25, 25, 25),
+                    ForeColor = Color.White
                 };
-
                 Label lunchLabel = new Label
                 {
                     Text = "It's lunch time! Please record your lunch activity.",
                     AutoSize = false,
                     Dock = DockStyle.Top,
                     TextAlign = ContentAlignment.MiddleCenter,
-                    Height = 100
+                    Height = 100,
+                    ForeColor = Color.White
                 };
-
                 Button okButton = new Button
                 {
                     Text = "OK",
                     DialogResult = DialogResult.OK,
                     Dock = DockStyle.Bottom,
-                    Height = 30
+                    Height = 35,
+                    FlatStyle = FlatStyle.Flat,
+                    BackColor = Color.FromArgb(50, 50, 50),
+                    ForeColor = Color.White
                 };
-
+                okButton.FlatAppearance.BorderSize = 0;
                 lunchForm.Controls.Add(lunchLabel);
                 lunchForm.Controls.Add(okButton);
-
                 if (lunchForm.ShowDialog() == DialogResult.OK)
                 {
                     isLunchHandled = true;
-                        ShowFullScreenInput();
+                    ShowFullScreenInput();
                 }
             }
         }
-
         #endregion
-
         #region Private Methods
-
         private void StartTimer()
         {
-            popupTimer.Interval = popupIntervalInMinutes * 60 * 1000; // Convert minutes to milliseconds
+            popupTimer.Stop();
+            popupTimer.Interval = popupIntervalInMinutes * 60 * 1000;
+            popupTimer.Tick -= popupTimer_Tick;
             popupTimer.Tick += popupTimer_Tick;
             popupTimer.Start();
         }
-
         private void LoadLogoImage()
         {
             string logoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "logo.png");
             if (File.Exists(logoPath))
             {
-                logoPictureBox.Image = Image.FromFile(logoPath);
+                using (var original = Image.FromFile(logoPath))
+                {
+                    logoPictureBox.Image = MakeImageWhite(new Bitmap(original));
+                }
             }
             else
             {
-                // Fallback or error handling if logo not found
-                // For now, just set it to null or a default image
                 logoPictureBox.Image = null;
             }
         }
-
+        private Bitmap MakeImageWhite(Bitmap original)
+        {
+            Bitmap bmp = new Bitmap(original.Width, original.Height);
+            for (int y = 0; y < original.Height; y++)
+            {
+                for (int x = 0; x < original.Width; x++)
+                {
+                    Color c = original.GetPixel(x, y);
+                    if (c.A > 0)
+                    {
+                        bmp.SetPixel(x, y, Color.FromArgb(c.A, 255, 255, 255));
+                    }
+                }
+            }
+            return bmp;
+        }
+        private Icon MakeIconWhite(Icon original)
+        {
+            Bitmap bmp = original.ToBitmap();
+            for (int y = 0; y < bmp.Height; y++)
+            {
+                for (int x = 0; x < bmp.Width; x++)
+                {
+                    Color c = bmp.GetPixel(x, y);
+                    if (c.A > 0)
+                    {
+                        bmp.SetPixel(x, y, Color.FromArgb(c.A, 255, 255, 255));
+                    }
+                }
+            }
+            return Icon.FromHandle(bmp.GetHicon());
+        }
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams cp = base.CreateParams;
+                cp.ExStyle |= 0x80;
+                return cp;
+            }
+        }
         #endregion
+    }
+}
+
+namespace AdinersDailyActivityApp.Forms
+{
+    public class ExportDateRangeDialog : Form
+    {
+        public DateTime FromDate { get; private set; }
+        public DateTime ToDate { get; private set; }
+
+        private DateTimePicker dtpFrom;
+        private DateTimePicker dtpTo;
+        private Button btnOk;
+        private Button btnCancel;
+
+        public ExportDateRangeDialog()
+        {
+            this.Text = "Select Date Range for Export";
+            this.StartPosition = FormStartPosition.CenterScreen;
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
+            this.BackColor = Color.FromArgb(25, 25, 25);
+            this.ForeColor = Color.White;
+            this.Size = new Size(300, 200);
+
+            Label lblFrom = new Label { Text = "From Date:", ForeColor = Color.White, Location = new Point(20, 20) };
+            dtpFrom = new DateTimePicker { Format = DateTimePickerFormat.Short, Value = DateTime.Now.AddMonths(-1), Location = new Point(120, 20), BackColor = Color.FromArgb(40, 40, 40), ForeColor = Color.White };
+
+            Label lblTo = new Label { Text = "To Date:", ForeColor = Color.White, Location = new Point(20, 60) };
+            dtpTo = new DateTimePicker { Format = DateTimePickerFormat.Short, Value = DateTime.Now, Location = new Point(120, 60), BackColor = Color.FromArgb(40, 40, 40), ForeColor = Color.White };
+
+            btnOk = new Button
+            {
+                Text = "OK",
+                DialogResult = DialogResult.OK,
+                Location = new Point(50, 120),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(50, 50, 50),
+                ForeColor = Color.White
+            };
+            btnOk.FlatAppearance.BorderSize = 0;
+
+            btnCancel = new Button
+            {
+                Text = "Cancel",
+                DialogResult = DialogResult.Cancel,
+                Location = new Point(150, 120),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(50, 50, 50),
+                ForeColor = Color.White
+            };
+            btnCancel.FlatAppearance.BorderSize = 0;
+
+            this.Controls.Add(lblFrom);
+            this.Controls.Add(dtpFrom);
+            this.Controls.Add(lblTo);
+            this.Controls.Add(dtpTo);
+            this.Controls.Add(btnOk);
+            this.Controls.Add(btnCancel);
+
+            this.AcceptButton = btnOk;
+            this.CancelButton = btnCancel;
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            base.OnFormClosing(e);
+            if (this.DialogResult == DialogResult.OK)
+            {
+                FromDate = dtpFrom.Value;
+                ToDate = dtpTo.Value;
+                if (FromDate > ToDate)
+                {
+                    MessageBox.Show("From date cannot be later than To date.", "Invalid Date Range");
+                    e.Cancel = true;
+                }
+            }
+        }
     }
 }
