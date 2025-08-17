@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
@@ -7,25 +8,25 @@ using System.Text.Json;
 using System.Windows.Forms;
 using Microsoft.Win32;
 using ClosedXML.Excel;
-using AdinersDailyActivityApp.Forms;
+using AdinersDailyActivityApp.Dialog;
 
 namespace AdinersDailyActivityApp
 {
     public class DailyActivityForm : Form
     {
         #region Fields
-        private Label lblTitle;
-        private TextBox txtActivity;
-        private ListBox lstActivityHistory;
-        private PictureBox logoPictureBox;
-        private System.Windows.Forms.Timer popupTimer;
-        private NotifyIcon trayIcon;
-        private ContextMenuStrip trayMenu;
-        private ContextMenuStrip historyContextMenu;
+        private Label lblTitle = null!;
+        private TextBox txtActivity = null!;
+        private ListBox lstActivityHistory = null!;
+        private PictureBox logoPictureBox = null!;
+        private System.Windows.Forms.Timer popupTimer = null!;
+        private NotifyIcon trayIcon = null!;
+        private ContextMenuStrip trayMenu = null!;
+        private ContextMenuStrip historyContextMenu = null!;
         private DateTime appStartTime;
         private DateTime popupTime;
         private int popupIntervalInMinutes;
-        private AppConfig config;
+        private AppConfig config = null!;
         private bool isLunchPopupShown = false;
         private bool isLunchHandled = false;
         private DateTime lastActivityInputTime = DateTime.MinValue;
@@ -136,7 +137,7 @@ namespace AdinersDailyActivityApp
         }
         #endregion
         #region Event Handlers
-        private void Form1_KeyDown(object sender, KeyEventArgs e)
+        private void Form1_KeyDown(object? sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Escape)
             {
@@ -149,11 +150,11 @@ namespace AdinersDailyActivityApp
                 e.SuppressKeyPress = true;
             }
         }
-        private void LstActivityHistory_MouseDoubleClick(object sender, MouseEventArgs e)
+        private void LstActivityHistory_MouseDoubleClick(object? sender, MouseEventArgs e)
         {
             if (lstActivityHistory.SelectedItem != null)
             {
-                string selectedItemText = lstActivityHistory.SelectedItem.ToString();
+                string selectedItemText = lstActivityHistory.SelectedItem!.ToString();
                 int closingBracketIndex = selectedItemText.IndexOf(']');
                 if (closingBracketIndex != -1 && closingBracketIndex + 1 < selectedItemText.Length)
                 {
@@ -170,13 +171,13 @@ namespace AdinersDailyActivityApp
                 }
             }
         }
-        private void OnExitClicked(object sender, EventArgs e)
+        private void OnExitClicked(object? sender, EventArgs e)
         {
             trayIcon.Visible = false;
             Application.Exit();
         }
 
-        private void OnInputNowClicked(object sender, EventArgs e)
+        private void OnInputNowClicked(object? sender, EventArgs e)
         {
             if ((DateTime.Now - lastActivityInputTime).TotalSeconds < 60 && lastActivityInputTime != DateTime.MinValue)
             {
@@ -185,7 +186,7 @@ namespace AdinersDailyActivityApp
             }
             ShowFullScreenInput();
         }
-        private void OnExportLogClicked(object sender, EventArgs e)
+        private void OnExportLogClicked(object? sender, EventArgs e)
         {
             using (var exportDialog = new ExportDateRangeDialog())
             {
@@ -208,7 +209,7 @@ namespace AdinersDailyActivityApp
                 }
             }
         }
-        private void OnSetIntervalClicked(object sender, EventArgs e)
+        private void OnSetIntervalClicked(object? sender, EventArgs e)
         {
             using (var setIntervalForm = new SetIntervalDialog(config.IntervalHours))
             {
@@ -221,17 +222,38 @@ namespace AdinersDailyActivityApp
                 }
             }
         }
-        private void OnEditHistoryClicked(object sender, EventArgs e)
+        private void OnEditHistoryClicked(object? sender, EventArgs e)
         {
             if (lstActivityHistory.SelectedItem != null)
             {
-                string selectedActivity = lstActivityHistory.SelectedItem.ToString();
-                txtActivity.Text = selectedActivity;
-                lstActivityHistory.Items.Remove(selectedActivity);
-                RemoveActivityFromLogFile(selectedActivity);
+                string selectedItem = lstActivityHistory.SelectedItem!.ToString();
+                int closingBracketIndex = selectedItem.IndexOf(']');
+                if (closingBracketIndex != -1)
+                {
+                    string inside = selectedItem.Substring(1, closingBracketIndex - 1);
+                    string[] parts = inside.Split('|').Select(p => p.Trim()).ToArray();
+                    if (parts.Length == 3)
+                    {
+                        string dateStr = parts[0];
+                        string timesStr = parts[1];
+                        string[] timeParts = timesStr.Split('-').Select(t => t.Trim()).ToArray();
+                        if (timeParts.Length == 2)
+                        {
+                            string endStr = timeParts[1];
+                            if (DateTime.TryParseExact($"{dateStr} {endStr}", "dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime timestamp))
+                            {
+                                string activity = selectedItem.Substring(closingBracketIndex + 1).Trim();
+                                string logEntry = $"[{timestamp.ToString(CultureInfo.InvariantCulture)}] {activity}";
+                                txtActivity.Text = activity;
+                                lstActivityHistory.Items.Remove(selectedItem);
+                                RemoveActivityFromLogFile(logEntry);
+                            }
+                        }
+                    }
+                }
             }
         }
-        private void popupTimer_Tick(object sender, EventArgs e)
+        private void popupTimer_Tick(object? sender, EventArgs e)
         {
             DateTime now = DateTime.Now;
             if (!isLunchPopupShown && now.Hour == 12 && now.Minute >= 0 && now.Minute <= 15)
@@ -249,14 +271,14 @@ namespace AdinersDailyActivityApp
                 popupTime = DateTime.Now;
             }
         }
-        private void SystemEvents_SessionEnding(object sender, SessionEndingEventArgs e) => SaveActivity();
+        private void SystemEvents_SessionEnding(object? sender, SessionEndingEventArgs e) => SaveActivity();
         #endregion
         #region Methods
         private void ShowFullScreenInput()
         {
             if ((DateTime.Now - lastActivityInputTime).TotalSeconds < 60 && lastActivityInputTime != DateTime.MinValue)
             {
-                // Masih cooldown → jangan tampilkan form
+                // Masih cooldown -> jangan tampilkan form
                 this.Hide();
                 return;
             }
@@ -280,17 +302,14 @@ namespace AdinersDailyActivityApp
             }
             this.Hide();
         }
-        private string FormatLogEntry(DateTime time, string activity, DateTime? prevTime)
+        private string FormatLogEntry(DateTime startTime, DateTime endTime, string activity)
         {
-            string formattedTime = time.ToString("dd/MM/yyyy - HH:mm", CultureInfo.InvariantCulture);
-            string durationStr = "";
-            if (prevTime.HasValue)
-            {
-                int minutes = (int)(time - prevTime.Value).TotalMinutes;
-                if (minutes < 0) minutes = 0;
-                durationStr = $" - {minutes} menit";
-            }
-            return $"[{formattedTime}{durationStr}] {activity}";
+            string dateStr = endTime.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+            string startStr = startTime.ToString("HH:mm", CultureInfo.InvariantCulture);
+            string endStr = endTime.ToString("HH:mm", CultureInfo.InvariantCulture);
+            int minutes = (int)(endTime - startTime).TotalMinutes;
+            if (minutes < 0) minutes = 0;
+            return $"[{dateStr} | {startStr} - {endStr} | {minutes} minutes] {activity}";
         }
         private void LoadLogHistory()
         {
@@ -299,8 +318,8 @@ namespace AdinersDailyActivityApp
             if (File.Exists(logFilePath))
             {
                 string[] lines = File.ReadAllLines(logFilePath);
-                DateTime? prevTime = null;
-                foreach (string line in lines.Reverse())
+                var entries = new List<(DateTime time, string activity)>();
+                foreach (string line in lines)
                 {
                     int timestampEndIndex = line.IndexOf(']');
                     if (timestampEndIndex > 0)
@@ -309,29 +328,47 @@ namespace AdinersDailyActivityApp
                         if (DateTime.TryParse(timestampStr, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime time))
                         {
                             string activity = line.Substring(timestampEndIndex + 2);
-                            string display = FormatLogEntry(time, activity, prevTime);
-                            lstActivityHistory.Items.Add(display);
+                            entries.Add((time, activity));
+                        }
+                    }
+                }
+                entries.Sort((a, b) => a.time.CompareTo(b.time)); // Sort ascending (oldest to newest)
+                var displays = new List<string>();
+                DateTime? currentDate = null;
+                DateTime? prevTime = null;
+                foreach (var entry in entries)
+                {
+                    DateTime time = entry.time;
+                    if (!currentDate.HasValue || time.Date != currentDate.Value.Date)
+                    {
+                        // New day
+                        currentDate = time.Date;
+                        prevTime = new DateTime(time.Year, time.Month, time.Day, 8, 0, 0);
+                        if (time < prevTime.Value)
+                        {
                             prevTime = time;
                         }
-                        else
-                        {
-                            lstActivityHistory.Items.Add(line);
-                        }
                     }
-                    else
-                    {
-                        lstActivityHistory.Items.Add(line);
-                    }
+                    DateTime start = prevTime.Value;
+                    if (start > time) start = time;
+                    string display = FormatLogEntry(start, time, entry.activity);
+                    displays.Add(display);
+                    prevTime = time;
+                }
+                displays.Reverse(); // Reverse to show newest first
+                foreach (string display in displays)
+                {
+                    lstActivityHistory.Items.Add(display);
                 }
             }
         }
-        private void RemoveActivityFromLogFile(string activityToRemove)
+        private void RemoveActivityFromLogFile(string logEntryToRemove)
         {
             string logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "activity_log.txt");
             if (File.Exists(logFilePath))
             {
                 string[] lines = File.ReadAllLines(logFilePath);
-                var filteredLines = lines.Where(line => !line.Trim().Equals(activityToRemove.Trim(), StringComparison.OrdinalIgnoreCase));
+                var filteredLines = lines.Where(line => !line.Trim().Equals(logEntryToRemove.Trim(), StringComparison.OrdinalIgnoreCase));
                 File.WriteAllLines(logFilePath, filteredLines);
             }
         }
@@ -494,81 +531,3 @@ namespace AdinersDailyActivityApp
     }
 }
 
-namespace AdinersDailyActivityApp.Forms
-{
-    public class ExportDateRangeDialog : Form
-    {
-        public DateTime FromDate { get; private set; }
-        public DateTime ToDate { get; private set; }
-
-        private DateTimePicker dtpFrom;
-        private DateTimePicker dtpTo;
-        private Button btnOk;
-        private Button btnCancel;
-
-        public ExportDateRangeDialog()
-        {
-            this.Text = "Select Date Range for Export";
-            this.StartPosition = FormStartPosition.CenterScreen;
-            this.FormBorderStyle = FormBorderStyle.FixedDialog;
-            this.MaximizeBox = false;
-            this.MinimizeBox = false;
-            this.BackColor = Color.FromArgb(25, 25, 25);
-            this.ForeColor = Color.White;
-            this.Size = new Size(300, 200);
-
-            Label lblFrom = new Label { Text = "From Date:", ForeColor = Color.White, Location = new Point(20, 20) };
-            dtpFrom = new DateTimePicker { Format = DateTimePickerFormat.Short, Value = DateTime.Now.AddMonths(-1), Location = new Point(120, 20), BackColor = Color.FromArgb(40, 40, 40), ForeColor = Color.White };
-
-            Label lblTo = new Label { Text = "To Date:", ForeColor = Color.White, Location = new Point(20, 60) };
-            dtpTo = new DateTimePicker { Format = DateTimePickerFormat.Short, Value = DateTime.Now, Location = new Point(120, 60), BackColor = Color.FromArgb(40, 40, 40), ForeColor = Color.White };
-
-            btnOk = new Button
-            {
-                Text = "OK",
-                DialogResult = DialogResult.OK,
-                Location = new Point(50, 120),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(50, 50, 50),
-                ForeColor = Color.White
-            };
-            btnOk.FlatAppearance.BorderSize = 0;
-
-            btnCancel = new Button
-            {
-                Text = "Cancel",
-                DialogResult = DialogResult.Cancel,
-                Location = new Point(150, 120),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(50, 50, 50),
-                ForeColor = Color.White
-            };
-            btnCancel.FlatAppearance.BorderSize = 0;
-
-            this.Controls.Add(lblFrom);
-            this.Controls.Add(dtpFrom);
-            this.Controls.Add(lblTo);
-            this.Controls.Add(dtpTo);
-            this.Controls.Add(btnOk);
-            this.Controls.Add(btnCancel);
-
-            this.AcceptButton = btnOk;
-            this.CancelButton = btnCancel;
-        }
-
-        protected override void OnFormClosing(FormClosingEventArgs e)
-        {
-            base.OnFormClosing(e);
-            if (this.DialogResult == DialogResult.OK)
-            {
-                FromDate = dtpFrom.Value;
-                ToDate = dtpTo.Value;
-                if (FromDate > ToDate)
-                {
-                    MessageBox.Show("From date cannot be later than To date.", "Invalid Date Range");
-                    e.Cancel = true;
-                }
-            }
-        }
-    }
-}

@@ -2,7 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace AdinersDailyActivityApp
+namespace AdinersDailyActivityApp.Dialog
 {
     public class EditActivityDialog : Form
     {

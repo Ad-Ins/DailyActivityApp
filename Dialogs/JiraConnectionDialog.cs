@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Windows.Forms;
 
-namespace AdinersDailyActivityApp
+namespace AdinersDailyActivityApp.Dialog
 {
     public class JiraConnectionDialog : Form
     {
