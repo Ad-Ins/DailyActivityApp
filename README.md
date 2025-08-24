@@ -107,7 +107,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Changelog
 
-### v1.3.0 (Latest)
+### v1.4.0 (Latest)
 - Single executable file (no .NET Runtime required)
 - Self-contained deployment (~149MB)
 - Portable application - no installation needed
