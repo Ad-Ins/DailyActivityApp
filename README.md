@@ -107,6 +107,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Changelog
 
+### v1.2.0 (Latest)
+- 24/7 popup reminders (removed working hours restriction)
+- "Don't show popup today" with daily auto-reset
+- Dark mode message boxes for Test Timer and Clear History
+- Auto-update system with GitHub integration
+- Improved Excel export with 3 sheets (Detailed, Summary, Overtime)
+- Enhanced overtime detection (weekends + after 8PM)
+
 ### v1.0.0 (Initial Release)
 - Basic activity tracking
 - Excel export functionality
