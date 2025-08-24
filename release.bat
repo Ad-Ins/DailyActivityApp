@@ -40,6 +40,7 @@ if not exist "publish\AdinersDailyActivityApp.exe" (
 )
 
 echo [5/6] Committing changes...
+if exist publish rmdir /s /q publish
 git add .
 git commit -m "Release v%VERSION% - Auto-generated release"
 

@@ -58,6 +58,7 @@ if not exist "publish\AdinersDailyActivityApp.exe" (
 )
 
 echo [6/7] Committing changes...
+if exist publish rmdir /s /q publish
 git add .
 git commit -m "Release v%VERSION% - %CHANGELOG%"
 

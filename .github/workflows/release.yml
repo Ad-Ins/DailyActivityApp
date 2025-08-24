@@ -24,17 +24,35 @@ jobs:
       run: dotnet build --configuration Release --no-restore
       
     - name: Publish Self-Contained
-      run: dotnet publish --configuration Release --runtime win-x64 --self-contained true --output ./publish --no-build
+      run: dotnet publish --configuration Release --runtime win-x64 --self-contained true --output ./publish
+      
+    - name: List published files
+      run: |
+        echo "Published files:"
+        dir publish
+        echo "Checking executable:"
+        if (Test-Path "publish\AdinersDailyActivityApp.exe") { echo "EXE found" } else { echo "EXE NOT found" }
+      shell: powershell
       
     - name: Create ZIP
       run: |
         cd publish
         7z a ../DailyActivityApp-${{ github.ref_name }}.zip AdinersDailyActivityApp.exe Assets/
+        cd ..
+        echo "ZIP created:"
+        dir *.zip
+        
+    - name: Verify ZIP contents
+      run: |
+        echo "ZIP contents:"
+        7z l DailyActivityApp-${{ github.ref_name }}.zip
         
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
         files: DailyActivityApp-${{ github.ref_name }}.zip
         generate_release_notes: true
+        draft: false
+        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
