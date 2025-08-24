@@ -6,10 +6,12 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Win32;
 using ClosedXML.Excel;
 using AdinersDailyActivityApp.Dialog;
+using AdinersDailyActivityApp.Services;
 
 namespace AdinersDailyActivityApp
 {
@@ -78,6 +80,9 @@ namespace AdinersDailyActivityApp
             StartTimer();
             LoadLogHistory();
             SystemEvents.SessionEnding += SystemEvents_SessionEnding;
+            
+            // Check for updates on startup (async)
+            _ = Task.Run(CheckForUpdatesOnStartup);
         }
         #endregion
 
@@ -126,6 +131,7 @@ namespace AdinersDailyActivityApp
             dontShowMenuItem.Click += OnDontShowTodayClicked;
             trayMenu.Items.Add(dontShowMenuItem);
             trayMenu.Items.Add("-");
+            trayMenu.Items.Add("Check for Updates", null, OnCheckUpdatesClicked);
             trayMenu.Items.Add("Clear History", null, OnClearHistoryClicked);
             trayMenu.Items.Add("Exit", null, OnExitClicked);
 
@@ -498,6 +504,61 @@ namespace AdinersDailyActivityApp
                 
                 string status = dontShowPopupToday ? "disabled" : "enabled";
                 trayIcon.ShowBalloonTip(2000, "Popup Status", $"Activity popups {status} for today", ToolTipIcon.Info);
+            }
+        }
+        
+        private async void OnCheckUpdatesClicked(object? sender, EventArgs e)
+        {
+            trayIcon.ShowBalloonTip(2000, "Checking Updates", "Checking for updates...", ToolTipIcon.Info);
+            
+            var hasUpdate = await UpdateService.CheckForUpdatesAsync();
+            if (hasUpdate)
+            {
+                var release = await UpdateService.GetLatestReleaseAsync();
+                if (release != null)
+                {
+                    ShowUpdateNotification(release, true);
+                }
+            }
+            else
+            {
+                ShowDarkMessageBox($"You are using the latest version ({UpdateService.CurrentVersion})", "No Updates Available");
+            }
+        }
+        
+        private async Task CheckForUpdatesOnStartup()
+        {
+            if (!config.CheckForUpdates) return;
+            
+            // Check once per day
+            if ((DateTime.Now - config.LastUpdateCheck).TotalHours < 24) return;
+            
+            var hasUpdate = await UpdateService.CheckForUpdatesAsync();
+            if (hasUpdate)
+            {
+                var release = await UpdateService.GetLatestReleaseAsync();
+                if (release != null)
+                {
+                    this.Invoke(() => ShowUpdateNotification(release, false));
+                }
+            }
+            
+            config.LastUpdateCheck = DateTime.Now;
+            config.Save();
+        }
+        
+        private void ShowUpdateNotification(GitHubRelease release, bool isManualCheck)
+        {
+            string message = $"New version available: {release.tag_name}\n\n" +
+                           $"Current version: {UpdateService.CurrentVersion}\n" +
+                           $"Released: {release.published_at:dd/MM/yyyy}\n\n" +
+                           $"Would you like to download the update?";
+            
+            var result = ShowDarkMessageBox(message, "Update Available", MessageBoxButtons.YesNo);
+            
+            if (result == DialogResult.Yes)
+            {
+                UpdateService.OpenDownloadPage();
             }
         }
 

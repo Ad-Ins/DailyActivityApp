@@ -13,6 +13,8 @@ namespace AdinersDailyActivityApp
         public int IntervalHours { get; set; } = 1;
         public bool DontShowPopupToday { get; set; } = false;
         public DateTime LastDontShowDate { get; set; } = DateTime.MinValue;
+        public DateTime LastUpdateCheck { get; set; } = DateTime.MinValue;
+        public bool CheckForUpdates { get; set; } = true;
 
         private static string ConfigFilePath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
 

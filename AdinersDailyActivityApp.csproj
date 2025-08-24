@@ -6,6 +6,13 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>disable</ImplicitUsings>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <ApplicationIcon>Assets\logo.ico</ApplicationIcon>
+    <Product>Daily Activity App</Product>
+    <Company>Adiners</Company>
+    <Copyright>Copyright © Adiners 2024</Copyright>
   </PropertyGroup>
   <ItemGroup>
     <Content Include="Assets\logo.png">
