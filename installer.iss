@@ -1,5 +1,4 @@
-; Inno Setup Script for Adiners Daily Activity App
-
+; Script Inno Setup untuk Adiners Daily Activity App
 [Setup]
 AppName=Adiners Daily Activity
 AppVersion=1.0
@@ -10,16 +9,20 @@ OutputBaseFilename=AdinersInstaller
 SetupIconFile=Assets\logo.ico
 Compression=lzma
 SolidCompression=yes
-DisableDirPage=yes
-DisableProgramGroupPage=yes
+DisableProgramGroupPage=no
 UninstallDisplayIcon={app}\AdinersDailyActivityApp.exe
-UninstallDisplayName=Adiners Daily Activity
-AppPublisher=Adiners
-PrivilegesRequired=lowest
+
 
 [Files]
-Source: "publish\AdinersDailyActivityApp.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "Assets\*"; DestDir: "{app}\Assets"; Flags: recursesubdirs createallsubdirs ignoreversion
+; File exe utama
+Source: "publish/AdinersDailyActivityApp.exe"; DestDir: "{app}"; Flags: ignoreversion
+; File konfigurasi
+Source: "publish/config.json"; DestDir: "{app}"; Flags: ignoreversion
+; File DLL
+Source: "publish/*.dll"; DestDir: "{app}"; Flags: ignoreversion
+
+; Folder Assets
+Source: "Assets\*"; DestDir: "{app}\Assets"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\Adiners Daily Activity"; Filename: "{app}\AdinersDailyActivityApp.exe"; IconFilename: "{app}\Assets\logo.ico"
@@ -36,6 +39,11 @@ Filename: "{sys}\schtasks.exe"; \
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
     ValueType: string; ValueName: "AdinersDailyActivity"; ValueData: """{app}\AdinersDailyActivityApp.exe"""; Flags: uninsdeletevalue
+
+; Tambahan: Set app untuk selalu run as admin
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; \
+    ValueType: string; ValueName: "{app}\AdinersDailyActivityApp.exe"; ValueData: "RUNASADMIN"; \
+    Flags: uninsdeletevalue
 
 [UninstallRun]
 Filename: "{sys}\schtasks.exe"; \

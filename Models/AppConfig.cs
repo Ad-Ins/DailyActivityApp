@@ -11,6 +11,8 @@ namespace AdinersDailyActivityApp
     public class AppConfig
     {
         public int IntervalHours { get; set; } = 1;
+        public bool DontShowPopupToday { get; set; } = false;
+        public DateTime LastDontShowDate { get; set; } = DateTime.MinValue;
 
         private static string ConfigFilePath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
 
@@ -32,7 +34,6 @@ namespace AdinersDailyActivityApp
             {
                 // Log the error (e.g., to console or a log file)
                 Console.WriteLine($"Error deserializing config.json: {ex.Message}");
-                // Return a new default config and save it to overwrite the corrupted one
                 var defaultConfig = new AppConfig();
                 defaultConfig.Save();
                 return defaultConfig;
@@ -45,11 +46,12 @@ namespace AdinersDailyActivityApp
             File.WriteAllText(ConfigFilePath, json);
         }
 
-        public string JiraUrl { get; set; }
-        public string JiraUsername { get; set; }
-        public string JiraPasswordEncrypted { get; set; }
+        // ======== Inisialisasi default untuk hilangkan warning CS8618 ========
+        public string JiraUrl { get; set; } = string.Empty;
+        public string JiraUsername { get; set; } = string.Empty;
+        public string JiraPasswordEncrypted { get; set; } = string.Empty;
 
-        // Tambahkan fungsi enkripsi/dekripsi sederhana (gunakan DPAPI)
+        // Enkripsi / dekripsi sederhana menggunakan DPAPI
         public static string Encrypt(string plain)
         {
             if (string.IsNullOrEmpty(plain)) return "";
@@ -57,6 +59,7 @@ namespace AdinersDailyActivityApp
             var enc = ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
             return Convert.ToBase64String(enc);
         }
+
         public static string Decrypt(string encrypted)
         {
             if (string.IsNullOrEmpty(encrypted)) return "";
