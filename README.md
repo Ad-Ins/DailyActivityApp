@@ -19,7 +19,7 @@ A modern Windows application for tracking daily activities with automatic remind
 ### Download Latest Release
 1. Go to [Releases](https://github.com/Ad-Ins/DailyActivityApp/releases/latest)
 2. Download `DailyActivityApp-vX.X.X.zip`
-3. Extract and run `AdinersDailyActivityApp.exe`
+3. Extract and run `AdinersDailyActivityApp.exe` (single file, no installation needed)
 
 ### Build from Source
 ```bash
@@ -89,8 +89,8 @@ Settings are stored in `config.json` in the application directory:
 
 ## System Requirements
 
-- Windows 10/11
-- .NET 6.0 Runtime
+- Windows 10/11 (x64)
+- No .NET Runtime required (self-contained)
 - Internet connection (for updates)
 
 ## Contributing
@@ -107,7 +107,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Changelog
 
-### v1.2.0 (Latest)
+### v1.3.0 (Latest)
+- Single executable file (no .NET Runtime required)
+- Self-contained deployment (~149MB)
+- Portable application - no installation needed
+- All previous features included
+
+### v1.2.0
 - 24/7 popup reminders (removed working hours restriction)
 - "Don't show popup today" with daily auto-reset
 - Dark mode message boxes for Test Timer and Clear History

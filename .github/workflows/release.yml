@@ -23,13 +23,13 @@ jobs:
     - name: Build
       run: dotnet build --configuration Release --no-restore
       
-    - name: Publish
-      run: dotnet publish --configuration Release --output ./publish --no-build
+    - name: Publish Self-Contained
+      run: dotnet publish --configuration Release --runtime win-x64 --self-contained true --output ./publish --no-build
       
     - name: Create ZIP
       run: |
         cd publish
-        7z a ../DailyActivityApp-${{ github.ref_name }}.zip *
+        7z a ../DailyActivityApp-${{ github.ref_name }}.zip AdinersDailyActivityApp.exe Assets/
         
     - name: Create Release
       uses: softprops/action-gh-release@v1
