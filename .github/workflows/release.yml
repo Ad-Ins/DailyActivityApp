@@ -26,31 +26,27 @@ jobs:
     - name: Publish Self-Contained
       run: dotnet publish --configuration Release --runtime win-x64 --self-contained true --output ./publish
       
-    - name: List published files
+    - name: Setup Inno Setup
       run: |
-        echo "Published files:"
-        dir publish
-        echo "Checking executable:"
-        if (Test-Path "publish\AdinersDailyActivityApp.exe") { echo "EXE found" } else { echo "EXE NOT found" }
+        Invoke-WebRequest -Uri "https://files.jrsoftware.org/is/6/innosetup-6.2.2.exe" -OutFile "innosetup.exe"
+        Start-Process -FilePath "innosetup.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
       shell: powershell
       
-    - name: Create ZIP
+    - name: Build Installer
       run: |
-        cd publish
-        7z a ../DailyActivityApp-${{ github.ref_name }}.zip AdinersDailyActivityApp.exe Assets/
-        cd ..
-        echo "ZIP created:"
-        dir *.zip
-        
-    - name: Verify ZIP contents
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+      shell: powershell
+      
+    - name: List installer files
       run: |
-        echo "ZIP contents:"
-        7z l DailyActivityApp-${{ github.ref_name }}.zip
+        echo "Installer files:"
+        dir installer-output
+      shell: powershell
         
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
-        files: DailyActivityApp-${{ github.ref_name }}.zip
+        files: installer-output/*.exe
         generate_release_notes: true
         draft: false
         prerelease: false

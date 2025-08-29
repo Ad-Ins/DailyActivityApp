@@ -123,7 +123,7 @@ namespace AdinersDailyActivityApp
             trayMenu.Items.Add("Input Activity Now", null, OnInputNowClicked);
             trayMenu.Items.Add("Export Log to Excel", null, OnExportLogClicked);
             trayMenu.Items.Add("Set Interval...", null, OnSetIntervalClicked);
-            trayMenu.Items.Add("Test Timer", null, OnTestTimerClicked);
+            trayMenu.Items.Add("Timer Information", null, OnTestTimerClicked);
             trayMenu.Items.Add("-");
             var dontShowMenuItem = new ToolStripMenuItem("Don't show popup today");
             dontShowMenuItem.CheckOnClick = true;
