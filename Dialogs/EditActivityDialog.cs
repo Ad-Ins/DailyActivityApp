@@ -38,6 +38,8 @@ namespace AdinersDailyActivityApp.Dialogs
             this.MinimizeBox = false;
             this.BackColor = Color.FromArgb(30, 30, 30);
             this.ForeColor = Color.White;
+            this.TopMost = true;
+            this.ShowInTaskbar = true;
 
             // Start Time
             var lblStart = new Label
@@ -51,9 +53,10 @@ namespace AdinersDailyActivityApp.Dialogs
             dtpStartTime = new DateTimePicker
             {
                 Format = DateTimePickerFormat.Custom,
-                CustomFormat = "dd/MM/yyyy HH:mm",
+                CustomFormat = "HH:mm",
+                ShowUpDown = true,
                 Location = new Point(110, 18),
-                Size = new Size(150, 25),
+                Size = new Size(80, 25),
                 Value = StartTime,
                 BackColor = Color.FromArgb(45, 45, 45),
                 ForeColor = Color.White
@@ -71,9 +74,10 @@ namespace AdinersDailyActivityApp.Dialogs
             dtpEndTime = new DateTimePicker
             {
                 Format = DateTimePickerFormat.Custom,
-                CustomFormat = "dd/MM/yyyy HH:mm",
+                CustomFormat = "HH:mm",
+                ShowUpDown = true,
                 Location = new Point(110, 53),
-                Size = new Size(150, 25),
+                Size = new Size(80, 25),
                 Value = EndTime,
                 BackColor = Color.FromArgb(45, 45, 45),
                 ForeColor = Color.White
@@ -149,11 +153,27 @@ namespace AdinersDailyActivityApp.Dialogs
                 lblType, txtType, lblActivity, txtActivity,
                 btnSave, btnCancel
             });
+            
+            this.Shown += EditActivityDialog_Shown;
         }
 
+        private void EditActivityDialog_Shown(object? sender, EventArgs e)
+        {
+            this.BringToFront();
+            this.Activate();
+            this.Focus();
+            txtActivity.Focus();
+        }
+        
         private void BtnSave_Click(object? sender, EventArgs e)
         {
-            if (dtpEndTime.Value <= dtpStartTime.Value)
+            // Combine original date with new time
+            DateTime newStartTime = new DateTime(StartTime.Year, StartTime.Month, StartTime.Day, 
+                dtpStartTime.Value.Hour, dtpStartTime.Value.Minute, 0);
+            DateTime newEndTime = new DateTime(EndTime.Year, EndTime.Month, EndTime.Day, 
+                dtpEndTime.Value.Hour, dtpEndTime.Value.Minute, 0);
+
+            if (newEndTime <= newStartTime)
             {
                 MessageBox.Show("End time must be after start time!", "Invalid Time", 
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -167,8 +187,8 @@ namespace AdinersDailyActivityApp.Dialogs
                 return;
             }
 
-            StartTime = dtpStartTime.Value;
-            EndTime = dtpEndTime.Value;
+            StartTime = newStartTime;
+            EndTime = newEndTime;
             ActivityType = txtType.Text.Trim();
             ActivityText = txtActivity.Text.Trim();
         }

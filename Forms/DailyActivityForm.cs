@@ -68,6 +68,24 @@ namespace AdinersDailyActivityApp
         private string currentActivityDescription = "";
         private TimeSpan elapsedTime = TimeSpan.Zero;
         
+        // Legacy variables for compatibility
+        private DateTime lastActivityInputTime = DateTime.MinValue;
+        private DateTime popupTime = DateTime.Now;
+        private int popupIntervalInMinutes = 60;
+        private bool dontShowPopupToday = false;
+        private System.Windows.Forms.Timer popupTimer = null!;
+        private bool isLunchHandled = false;
+        
+        // Exclude times functionality
+        private List<(TimeSpan start, TimeSpan end, string name)> excludeTimes = new();
+        private bool isTimerPausedForExclude = false;
+        private string pausedActivityType = "";
+        private string pausedActivityDescription = "";
+        private DateTime pausedTimerStartTime;
+        
+        // History expand/collapse functionality
+        private HashSet<string> expandedHeaders = new();
+        
         private const string TypeHint = "Enter type...";
         private const string ActivityHint = "Enter activity...";
         #endregion
@@ -91,6 +109,7 @@ namespace AdinersDailyActivityApp
         private void LoadConfig()
         {
             config = AppConfig.Load();
+            LoadExcludeTimes();
         }
 
         private void InitializeComponent()
@@ -101,14 +120,17 @@ namespace AdinersDailyActivityApp
             lstActivityHistory = new ListBox();
             logoPictureBox = new PictureBox();
             displayTimer = new System.Windows.Forms.Timer();
+            popupTimer = new System.Windows.Forms.Timer();
             btnStartStop = new Button();
             // Tray menu
             trayMenu = new ContextMenuStrip();
             trayMenu.BackColor = Color.FromArgb(30, 30, 30);
             trayMenu.ForeColor = Color.White;
             trayMenu.Items.Add("Input Activity Now", null, OnInputNowClicked);
+            trayMenu.Items.Add("Stop Timer", null, OnStopTimerClicked);
             trayMenu.Items.Add("Export Log to Excel", null, OnExportLogClicked);
             trayMenu.Items.Add("Set Interval...", null, OnSetIntervalClicked);
+            trayMenu.Items.Add("Exclude Times...", null, OnExcludeTimesClicked);
             trayMenu.Items.Add("Timer Information", null, OnTestTimerClicked);
             trayMenu.Items.Add("-");
             var dontShowMenuItem = new ToolStripMenuItem("Don't show popup today");
@@ -124,7 +146,24 @@ namespace AdinersDailyActivityApp
             trayMenu.Items.Add("Exit", null, OnExitClicked);
 
             string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "logo.ico");
-            Icon trayAppIcon = File.Exists(iconPath) ? MakeIconWhite(new Icon(iconPath)) : SystemIcons.Application;
+            Icon trayAppIcon;
+            
+            try
+            {
+                if (File.Exists(iconPath))
+                {
+                    trayAppIcon = new Icon(iconPath);
+                }
+                else
+                {
+                    trayAppIcon = SystemIcons.Application;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Fallback to system icon if there's any error
+                trayAppIcon = SystemIcons.Application;
+            }
 
             trayIcon = new NotifyIcon
             {
@@ -139,8 +178,9 @@ namespace AdinersDailyActivityApp
             historyContextMenu = new ContextMenuStrip();
             historyContextMenu.BackColor = Color.FromArgb(30, 30, 30);
             historyContextMenu.ForeColor = Color.White;
-            historyContextMenu.Items.Add("Edit", null, OnEditHistoryClicked); // Re-enabled for on-the-fly editing
+            historyContextMenu.Items.Add("Edit Activity (F2)", null, OnEditHistoryClicked);
             lstActivityHistory.ContextMenuStrip = historyContextMenu;
+            lstActivityHistory.KeyDown += LstActivityHistory_KeyDown;
         }
 
         private void SetupForm()
@@ -370,6 +410,15 @@ namespace AdinersDailyActivityApp
             e.DrawFocusRectangle();
         }
         
+        private void LstActivityHistory_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.F2)
+            {
+                OnEditHistoryClicked(sender, e);
+                e.Handled = true;
+            }
+        }
+        
         private void LstActivityHistory_MouseDoubleClick(object? sender, MouseEventArgs e)
         {
             if (lstActivityHistory.SelectedItem != null)
@@ -379,18 +428,17 @@ namespace AdinersDailyActivityApp
                 // Check if it's a header (type group)
                 if (!selectedItemText.StartsWith("     "))
                 {
-                    // Extract type from header: [date | duration] TYPE
-                    int closingBracketIndex = selectedItemText.IndexOf(']');
-                    if (closingBracketIndex != -1)
+                    // Toggle expand/collapse for header
+                    string headerKey = selectedItemText.Substring(2); // Remove icon (▶ or ▼)
+                    if (expandedHeaders.Contains(headerKey))
                     {
-                        string type = selectedItemText.Substring(closingBracketIndex + 1).Trim();
-                        
-                        cmbType.Text = type;
-                        cmbType.ForeColor = Color.White;
-                        // Clear activity when clicking header
-                        txtActivity.Text = ActivityHint;
-                        txtActivity.ForeColor = Color.FromArgb(180, 180, 180);
+                        expandedHeaders.Remove(headerKey);
                     }
+                    else
+                    {
+                        expandedHeaders.Add(headerKey);
+                    }
+                    LoadLogHistory(); // Refresh display
                 }
                 else
                 {
@@ -443,6 +491,14 @@ namespace AdinersDailyActivityApp
             }
             ShowFullScreenInput();
         }
+        
+        private void OnStopTimerClicked(object? sender, EventArgs e)
+        {
+            if (isTimerRunning || isTimerPausedForExclude)
+            {
+                StopTimer();
+            }
+        }
 
         private void OnExportLogClicked(object? sender, EventArgs e)
         {
@@ -456,7 +512,8 @@ namespace AdinersDailyActivityApp
                     {
                         saveFileDialog.Filter = "Excel files (*.xlsx)|*.xlsx|All files (*.*)|*.*";
                         saveFileDialog.Title = "Export Activity Log";
-                        saveFileDialog.FileName = "activity_log.xlsx";
+                        string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                        saveFileDialog.FileName = $"activity_log_{timestamp}.xlsx";
                         if (saveFileDialog.ShowDialog() == DialogResult.OK)
                         {
                             ExportLogToExcel(fromDate, toDate, saveFileDialog.FileName);
@@ -476,7 +533,7 @@ namespace AdinersDailyActivityApp
                     if (config.IntervalHours < 1) config.IntervalHours = 1; // Minimum 1 hour
                     config.Save();
                     LoadConfig();
-                    StartTimer(); // refresh interval
+                    StartDisplayTimer(); // refresh interval
                 }
             }
         }
@@ -496,6 +553,12 @@ namespace AdinersDailyActivityApp
                 LoadLogHistory();
                 ShowDarkMessageBox("History cleared successfully!", "Success");
             }
+        }
+        
+        private void OnRefreshIconClicked(object? sender, EventArgs e)
+        {
+            RefreshTrayIcon();
+            trayIcon.ShowBalloonTip(2000, "Icon Refreshed", "Tray icon has been refreshed from logo.ico", ToolTipIcon.Info);
         }
         
         private void OnTestTimerClicked(object? sender, EventArgs e)
@@ -608,18 +671,6 @@ namespace AdinersDailyActivityApp
                 Font = new Font("Segoe UI", 10)
             };
             
-            Button btnOpenGitHub = new Button
-            {
-                Text = "Open GitHub",
-                Size = new Size(100, 30),
-                Location = new Point(20, 110),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(50, 50, 50),
-                ForeColor = Color.White
-            };
-            btnOpenGitHub.FlatAppearance.BorderSize = 0;
-            btnOpenGitHub.Click += (s, e) => { UpdateService.OpenDownloadPage(); noUpdateForm.Close(); };
-            
             Button btnOK = new Button
             {
                 Text = "OK",
@@ -632,7 +683,7 @@ namespace AdinersDailyActivityApp
             };
             btnOK.FlatAppearance.BorderSize = 0;
             
-            noUpdateForm.Controls.AddRange(new Control[] { messageLabel, btnOpenGitHub, btnOK });
+            noUpdateForm.Controls.AddRange(new Control[] { messageLabel, btnOK });
             noUpdateForm.Show();
         }
         
@@ -641,7 +692,7 @@ namespace AdinersDailyActivityApp
             Form aboutForm = new Form
             {
                 Width = 480,
-                Height = 320,
+                Height = 420,
                 Text = "About Daily Activity App",
                 StartPosition = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedDialog,
@@ -685,13 +736,16 @@ namespace AdinersDailyActivityApp
             Label featuresLabel = new Label
             {
                 Text = "Key Features:\n" +
-                       "• 24/7 automatic activity reminders\n" +
+                       "• Manual timer with START/STOP button\n" +
+                       "• Automatic midnight activity splitting\n" +
+                       "• Exclude time periods (lunch, breaks)\n" +
+                       "• On-the-fly activity editing (F2)\n" +
                        "• Smart activity type management\n" +
                        "• Excel export with detailed reports\n" +
                        "• Overtime tracking and analysis\n" +
                        "• Auto-update system",
                 Location = new Point(20, 210),
-                Size = new Size(200, 120),
+                Size = new Size(200, 140),
                 ForeColor = Color.FromArgb(200, 200, 200),
                 Font = new Font("Segoe UI", 9)
             };
@@ -699,30 +753,18 @@ namespace AdinersDailyActivityApp
             Label copyrightLabel = new Label
             {
                 Text = "© 2024 PT Adicipta Invosi Teknologi\nDeveloped by LJP",
-                Location = new Point(240, 230),
+                Location = new Point(240, 330),
                 Size = new Size(200, 40),
                 ForeColor = Color.FromArgb(150, 150, 150),
                 Font = new Font("Segoe UI", 9),
                 TextAlign = ContentAlignment.TopRight
             };
             
-            Button btnGitHub = new Button
-            {
-                Text = "GitHub Repository",
-                Size = new Size(130, 30),
-                Location = new Point(240, 280),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(50, 50, 50),
-                ForeColor = Color.White
-            };
-            btnGitHub.FlatAppearance.BorderSize = 0;
-            btnGitHub.Click += (s, e) => { UpdateService.OpenDownloadPage(); };
-            
             Button btnClose = new Button
             {
                 Text = "Close",
                 Size = new Size(80, 30),
-                Location = new Point(380, 280),
+                Location = new Point(380, 370),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(50, 50, 50),
                 ForeColor = Color.White,
@@ -732,7 +774,7 @@ namespace AdinersDailyActivityApp
             
             aboutForm.Controls.AddRange(new Control[] { 
                 titleLabel, versionLabel, descriptionLabel, featuresLabel, 
-                copyrightLabel, btnGitHub, btnClose 
+                copyrightLabel, btnClose 
             });
             
             aboutForm.ShowDialog();
@@ -740,120 +782,91 @@ namespace AdinersDailyActivityApp
 
         private void OnEditHistoryClicked(object? sender, EventArgs e)
         {
-            try
-            {
-                if (lstActivityHistory.SelectedItem != null)
-            {
-                string selectedItem = lstActivityHistory.SelectedItem!.ToString();
-                int selectedIndex = lstActivityHistory.SelectedIndex;
-                
-                // Check if it's a header (type group)
-                if (!selectedItem.StartsWith("     "))
-                {
-                    // Header edit - just copy type to input
-                    int closingBracketIndex = selectedItem.IndexOf(']');
-                    if (closingBracketIndex != -1)
-                    {
-                        string type = selectedItem.Substring(closingBracketIndex + 1).Trim();
-                        cmbType.Text = type;
-                        cmbType.ForeColor = Color.White;
-                        txtActivity.Text = ActivityHint;
-                        txtActivity.ForeColor = Color.FromArgb(180, 180, 180);
-                    }
-                }
-                else
-                {
-                    // Sub-item edit - open edit dialog
-                    int closingBracketIndex = selectedItem.IndexOf(']');
-                    if (closingBracketIndex != -1)
-                    {
-                        string inside = selectedItem.Substring(1, closingBracketIndex - 1);
-                        string[] parts = inside.Split('|').Select(p => p.Trim()).ToArray();
-                        
-                        if (parts.Length == 2) // [time range | duration]
-                        {
-                            string timesStr = parts[0];
-                            string[] timeParts = timesStr.Split('-').Select(t => t.Trim()).ToArray();
-                            
-                            if (timeParts.Length == 2)
-                            {
-                                // Find date from header and type
-                                string dateStr = "";
-                                string type = "";
-                                
-                                // Look backwards to find the header
-                                for (int i = selectedIndex - 1; i >= 0; i--)
-                                {
-                                    string item = lstActivityHistory.Items[i].ToString();
-                                    if (!item.StartsWith("     ")) // Found header
-                                    {
-                                        int headerBracketIndex = item.IndexOf(']');
-                                        if (headerBracketIndex != -1)
-                                        {
-                                            string headerInside = item.Substring(1, headerBracketIndex - 1);
-                                            string[] headerParts = headerInside.Split('|').Select(p => p.Trim()).ToArray();
-                                            if (headerParts.Length == 2)
-                                            {
-                                                dateStr = headerParts[0]; // dd/MM/yyyy
-                                                type = item.Substring(headerBracketIndex + 1).Trim();
-                                            }
-                                        }
-                                        break;
-                                    }
-                                }
-                                
-                                if (!string.IsNullOrEmpty(dateStr))
-                                {
-                                    string startStr = timeParts[0];
-                                    string endStr = timeParts[1];
-                                    
-                                    if (DateTime.TryParseExact($"{dateStr} {startStr}", "dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime startTime) &&
-                                        DateTime.TryParseExact($"{dateStr} {endStr}", "dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime endTime))
-                                    {
-                                        string activity = selectedItem.Substring(closingBracketIndex + 1).Trim();
-                                        
-                                        // Create original log entry to remove
-                                        string originalLogEntry = $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {type} | {activity}";
-                                        
-                                        try
-                                        {
-                                            // Open edit dialog
-                                            using (var editDialog = new EditActivityDialog(startTime, endTime, type, activity))
-                                            {
-                                                if (editDialog.ShowDialog() == DialogResult.OK)
-                                                {
-                                                    // Remove original entry
-                                                    RemoveActivityFromLogFile(originalLogEntry);
-                                                    
-                                                    // Add new entry
-                                                    string newLogEntry = $"[{editDialog.EndTime.ToString(CultureInfo.InvariantCulture)}] {editDialog.ActivityType} | {editDialog.ActivityText}";
-                                                    string logFilePath = GetLogFilePath();
-                                                    File.AppendAllText(logFilePath, newLogEntry + Environment.NewLine);
-                                                    
-                                                    // Refresh display
-                                                    LoadLogHistory();
-                                                }
-                                            }
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            ShowDarkMessageBox($"Error opening edit dialog: {ex.Message}", "Edit Error");
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            else
+            if (lstActivityHistory.SelectedItem == null)
             {
                 ShowDarkMessageBox("Please select an activity item to edit.", "No Selection");
+                return;
             }
-            }
-            catch (Exception ex)
+
+            string selectedItem = lstActivityHistory.SelectedItem.ToString();
+            int selectedIndex = lstActivityHistory.SelectedIndex;
+            
+            // Only allow editing sub-items (activities), not headers
+            if (!selectedItem.StartsWith("     "))
             {
-                ShowDarkMessageBox($"Error in edit function: {ex.Message}\n\nStack trace: {ex.StackTrace}", "Edit Error");
+                ShowDarkMessageBox("Please select an activity (not a header) to edit.", "Invalid Selection");
+                return;
+            }
+
+            // Parse sub-item: "     [HH:mm - HH:mm | duration] activity"
+            int closingBracketIndex = selectedItem.IndexOf(']');
+            if (closingBracketIndex == -1) return;
+
+            string inside = selectedItem.Substring(6, closingBracketIndex - 6); // Skip "     ["
+            string[] parts = inside.Split('|');
+            if (parts.Length != 2) return;
+
+            string timesStr = parts[0].Trim();
+            string[] timeParts = timesStr.Split('-');
+            if (timeParts.Length != 2) return;
+
+            string startStr = timeParts[0].Trim();
+            string endStr = timeParts[1].Trim();
+            string activity = selectedItem.Substring(closingBracketIndex + 1).Trim();
+
+            // Find date and type from header
+            string dateStr = "";
+            string type = "";
+            for (int i = selectedIndex - 1; i >= 0; i--)
+            {
+                string item = lstActivityHistory.Items[i].ToString();
+                if (!item.StartsWith("     ")) // Found header
+                {
+                    // Remove expand icon and parse header: ▶ [date | start-end | duration] type
+                    string headerWithoutIcon = item.Substring(2); // Remove icon
+                    int headerBracketIndex = headerWithoutIcon.IndexOf(']');
+                    if (headerBracketIndex != -1)
+                    {
+                        string headerInside = headerWithoutIcon.Substring(1, headerBracketIndex - 1);
+                        string[] headerParts = headerInside.Split('|');
+                        if (headerParts.Length == 3) // date | start-end | duration
+                        {
+                            dateStr = headerParts[0].Trim();
+                            type = headerWithoutIcon.Substring(headerBracketIndex + 1).Trim();
+                        }
+                    }
+                    break;
+                }
+            }
+
+            if (string.IsNullOrEmpty(dateStr)) return;
+
+            // Parse times
+            if (!DateTime.TryParseExact($"{dateStr} {startStr}", "dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime startTime) ||
+                !DateTime.TryParseExact($"{dateStr} {endStr}", "dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime endTime))
+                return;
+
+            // Create original log entry for removal
+            string originalLogEntry = $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {type} | {activity}";
+
+            // Open edit dialog
+            using (var editDialog = new EditActivityDialog(startTime, endTime, type, activity))
+            {
+                if (editDialog.ShowDialog() == DialogResult.OK)
+                {
+                    // Remove original entry
+                    RemoveActivityFromLogFile(originalLogEntry);
+                    
+                    // Add new entry
+                    string newLogEntry = $"[{editDialog.EndTime.ToString(CultureInfo.InvariantCulture)}] {editDialog.ActivityType} | {editDialog.ActivityText}";
+                    string logFilePath = GetLogFilePath();
+                    File.AppendAllText(logFilePath, newLogEntry + Environment.NewLine);
+                    
+                    // Refresh display
+                    LoadLogHistory();
+                    
+                    trayIcon.ShowBalloonTip(2000, "Activity Updated", "Activity has been successfully updated.", ToolTipIcon.Info);
+                }
             }
         }
 
@@ -1089,24 +1102,46 @@ namespace AdinersDailyActivityApp
                         }
 
                         int totalDur = segments.Sum(s => s.dur);
+                        
+                        // Calculate overall start and end times
+                        DateTime overallStart = segments.Min(s => s.start);
+                        DateTime overallEnd = segments.Max(s => s.end);
+                        string overallStartStr = overallStart.ToString("HH:mm", CultureInfo.InvariantCulture);
+                        string overallEndStr = overallEnd.ToString("HH:mm", CultureInfo.InvariantCulture);
 
-                        // Header - hanya type saja
-                        string header = $"[{dateStr} | {totalDur} minutes] {type}";
+                        // Create header key without icon for comparison
+                        string headerKey = $"[{dateStr} | {overallStartStr}-{overallEndStr} | {FormatDuration(totalDur)}] {type}";
+                        bool isExpanded = expandedHeaders.Contains(headerKey);
+                        
+                        // Header with expand/collapse indicator
+                        string expandIcon = isExpanded ? "▼" : "▶";
+                        string header = $"{expandIcon} {headerKey}";
+                        
                         lstActivityHistory.Items.Add(header);
 
-                        // Sub-items
-                        foreach (var seg in segments)
+                        // Sub-items (only show if expanded)
+                        if (isExpanded)
                         {
-                            string startStr = seg.start.ToString("HH:mm", CultureInfo.InvariantCulture);
-                            string endStr = seg.end.ToString("HH:mm", CultureInfo.InvariantCulture);
-                            string sub = $"     [{startStr} - {endStr} | {seg.dur} minutes] {seg.activity}";
-                            lstActivityHistory.Items.Add(sub);
+                            foreach (var seg in segments)
+                            {
+                                string startStr = seg.start.ToString("HH:mm", CultureInfo.InvariantCulture);
+                                string endStr = seg.end.ToString("HH:mm", CultureInfo.InvariantCulture);
+                                string sub = $"     [{startStr} - {endStr} | {FormatDuration(seg.dur)}] {seg.activity}";
+                                lstActivityHistory.Items.Add(sub);
+                            }
                         }
                     }
                 }
             }
         }
 
+        private string FormatDuration(int totalMinutes)
+        {
+            int hours = totalMinutes / 60;
+            int minutes = totalMinutes % 60;
+            return $"{hours:D2}:{minutes:D2}:00";
+        }
+        
         private void RemoveActivityFromLogFile(string logEntryToRemove)
         {
             string logFilePath = GetLogFilePath();
@@ -1366,12 +1401,201 @@ namespace AdinersDailyActivityApp
         
         private void DisplayTimer_Tick(object? sender, EventArgs e)
         {
+            DateTime now = DateTime.Now;
+            
+            // Check exclude times
+            CheckExcludeTimes(now);
+            
+            // Check for midnight crossing if timer is running
+            if (isTimerRunning)
+            {
+                DateTime timerStartDate = timerStartTime.Date;
+                DateTime currentDate = now.Date;
+                
+                // If we've crossed midnight, auto-split the activity
+                if (currentDate > timerStartDate)
+                {
+                    AutoSplitAtMidnight();
+                }
+            }
+            
             UpdateTrayIcon();
+        }
+        
+        private void OnExcludeTimesClicked(object? sender, EventArgs e)
+        {
+            using (var excludeDialog = new ExcludeTimeDialog(excludeTimes))
+            {
+                if (excludeDialog.ShowDialog() == DialogResult.OK)
+                {
+                    excludeTimes = excludeDialog.ExcludeTimes;
+                    SaveExcludeTimes();
+                }
+            }
+        }
+        
+        private void CheckExcludeTimes(DateTime now)
+        {
+            TimeSpan currentTime = now.TimeOfDay;
+            
+            // Check if we're in an exclude period
+            bool inExcludePeriod = excludeTimes.Any(et => currentTime >= et.start && currentTime < et.end);
+            
+            if (inExcludePeriod && isTimerRunning && !isTimerPausedForExclude)
+            {
+                // Pause timer for exclude period
+                PauseTimerForExclude();
+            }
+            else if (!inExcludePeriod && isTimerPausedForExclude)
+            {
+                // Resume timer after exclude period
+                ResumeTimerAfterExclude();
+            }
+        }
+        
+        private void PauseTimerForExclude()
+        {
+            if (!isTimerRunning) return;
+            
+            DateTime now = DateTime.Now;
+            
+            // Save current activity up to now
+            string typePart = string.IsNullOrEmpty(currentActivityType) ? "" : $"{currentActivityType} | ";
+            string logEntry = $"[{now.ToString(CultureInfo.InvariantCulture)}] {typePart}{currentActivityDescription}";
+            string logFilePath = GetLogFilePath();
+            File.AppendAllText(logFilePath, logEntry + Environment.NewLine);
+            
+            // Store current timer state
+            pausedActivityType = currentActivityType;
+            pausedActivityDescription = currentActivityDescription;
+            pausedTimerStartTime = timerStartTime;
+            
+            // Mark as paused for exclude
+            isTimerPausedForExclude = true;
+            
+            // Find exclude period name
+            TimeSpan currentTime = now.TimeOfDay;
+            var excludePeriod = excludeTimes.FirstOrDefault(et => currentTime >= et.start && currentTime < et.end);
+            string periodName = excludePeriod.name ?? "Break";
+            
+            int totalMinutes = (int)(now - timerStartTime).TotalMinutes;
+            trayIcon.ShowBalloonTip(3000, $"Timer Paused - {periodName}", 
+                $"Activity saved: {totalMinutes} minutes\nTimer will resume after {periodName}", 
+                ToolTipIcon.Info);
+            
+            LoadLogHistory();
+        }
+        
+        private void ResumeTimerAfterExclude()
+        {
+            if (!isTimerPausedForExclude) return;
+            
+            // Restore timer state
+            currentActivityType = pausedActivityType;
+            currentActivityDescription = pausedActivityDescription;
+            timerStartTime = DateTime.Now; // Start fresh from now
+            isTimerRunning = true;
+            isTimerPausedForExclude = false;
+            
+            // Update button appearance
+            btnStartStop.Text = "STOP";
+            btnStartStop.BackColor = Color.FromArgb(220, 53, 69);
+            
+            trayIcon.ShowBalloonTip(2000, "Timer Resumed", 
+                $"Timer resumed for: {currentActivityDescription}", 
+                ToolTipIcon.Info);
+        }
+        
+        private void SaveExcludeTimes()
+        {
+            try
+            {
+                string configDir = Path.GetDirectoryName(GetLogFilePath())!;
+                string excludeTimesPath = Path.Combine(configDir, "exclude_times.json");
+                
+                var json = System.Text.Json.JsonSerializer.Serialize(excludeTimes, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(excludeTimesPath, json);
+            }
+            catch { /* Ignore save errors */ }
+        }
+        
+        private void LoadExcludeTimes()
+        {
+            try
+            {
+                string configDir = Path.GetDirectoryName(GetLogFilePath())!;
+                string excludeTimesPath = Path.Combine(configDir, "exclude_times.json");
+                
+                if (File.Exists(excludeTimesPath))
+                {
+                    string json = File.ReadAllText(excludeTimesPath);
+                    excludeTimes = System.Text.Json.JsonSerializer.Deserialize<List<(TimeSpan start, TimeSpan end, string name)>>(json) ?? new();
+                }
+                else
+                {
+                    // Set default lunch break if no exclude times file exists
+                    excludeTimes = new List<(TimeSpan start, TimeSpan end, string name)>
+                    {
+                        (new TimeSpan(12, 0, 0), new TimeSpan(13, 0, 0), "Lunch Break")
+                    };
+                    SaveExcludeTimes(); // Save the default
+                }
+            }
+            catch 
+            { 
+                // If there's an error, set default lunch break
+                excludeTimes = new List<(TimeSpan start, TimeSpan end, string name)>
+                {
+                    (new TimeSpan(12, 0, 0), new TimeSpan(13, 0, 0), "Lunch Break")
+                };
+                SaveExcludeTimes();
+            }
+        }
+        
+        private void AutoSplitAtMidnight()
+        {
+            if (!isTimerRunning) return;
+            
+            // Calculate midnight of the start date
+            DateTime midnight = timerStartTime.Date.AddDays(1); // 00:00 of next day
+            
+            // Save the activity from start time to midnight
+            string typePart = string.IsNullOrEmpty(currentActivityType) ? "" : $"{currentActivityType} | ";
+            string logEntry = $"[{midnight.ToString(CultureInfo.InvariantCulture)}] {typePart}{currentActivityDescription}";
+            string logFilePath = GetLogFilePath();
+            File.AppendAllText(logFilePath, logEntry + Environment.NewLine);
+            
+            // Calculate duration for notification
+            int totalMinutes = (int)(midnight - timerStartTime).TotalMinutes;
+            
+            // Restart timer from midnight with same activity
+            timerStartTime = midnight;
+            
+            // Show notification about auto-split
+            trayIcon.ShowBalloonTip(3000, "Activity Auto-Split", 
+                $"Activity split at midnight: {totalMinutes} minutes logged\nTimer continues for: {currentActivityDescription}", 
+                ToolTipIcon.Info);
+            
+            // Refresh history display
+            LoadLogHistory();
         }
         
         private void UpdateTrayIcon()
         {
-            if (isTimerRunning)
+            // Update Stop Timer menu visibility
+            var stopTimerItem = trayMenu.Items[1]; // Stop Timer is at index 1
+            stopTimerItem.Visible = isTimerRunning || isTimerPausedForExclude;
+            
+            if (isTimerPausedForExclude)
+            {
+                trayIcon.Text = $"Timer Paused - {pausedActivityDescription}";
+                
+                if (lblTitle != null)
+                {
+                    lblTitle.Text = $"Timer Paused (Break Time) - {pausedActivityDescription}";
+                }
+            }
+            else if (isTimerRunning)
             {
                 elapsedTime = DateTime.Now - timerStartTime;
                 string timeStr = $"{(int)elapsedTime.TotalHours:D2}:{elapsedTime.Minutes:D2}:{elapsedTime.Seconds:D2}";
@@ -1428,6 +1652,33 @@ namespace AdinersDailyActivityApp
             return bmp;
         }
 
+        private void RefreshTrayIcon()
+        {
+            string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "logo.ico");
+            
+            try
+            {
+                if (File.Exists(iconPath))
+                {
+                    var newIcon = new Icon(iconPath);
+                    
+                    // Update tray icon
+                    var oldIcon = trayIcon.Icon;
+                    trayIcon.Icon = newIcon;
+                    
+                    // Dispose old icon to free resources
+                    if (oldIcon != null && oldIcon != SystemIcons.Application)
+                    {
+                        oldIcon.Dispose();
+                    }
+                }
+            }
+            catch
+            {
+                // Keep current icon if there's an error
+            }
+        }
+        
         private Icon MakeIconWhite(Icon original)
         {
             Bitmap bmp = original.ToBitmap();

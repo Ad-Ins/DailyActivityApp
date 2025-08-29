@@ -4,15 +4,16 @@ A modern Windows application for tracking daily activities with automatic remind
 
 ## Features
 
-- ✅ **24/7 Activity Tracking** - Automatic popup reminders at configurable intervals
+- ✅ **Clockify-Style Timer** - Manual START/STOP button with real-time elapsed time display
+- ✅ **Automatic Midnight Splitting** - Activities automatically split at 00:00 for accurate daily tracking
+- ✅ **Exclude Time Periods** - Configure break times (lunch, coffee) that auto-pause/resume timer
+- ✅ **On-the-Fly Editing** - Edit activity times and details with F2 key or right-click menu
 - ✅ **Smart Type Management** - Remember and suggest activity types from history
 - ✅ **Excel Export** - Export to Excel with 3 sheets: Detailed Log, Summary by Type, and Overtime tracking
 - ✅ **Overtime Detection** - Automatically detect weekend work and after-hours activities
 - ✅ **Dark Mode UI** - Modern dark theme with rounded panels and flat design
-- ✅ **Flexible Popup Control** - "Don't show popup today" option with daily reset
 - ✅ **Auto-Update** - Automatic update notifications with auto-download from GitHub releases
-- ✅ **History Management** - View, edit, and clear activity history with comprehensive edit dialog
-- ✅ **Lunch Reminders** - Special popup at lunch time (12:00-12:15)
+- ✅ **History Management** - View grouped activities by date and type with comprehensive management
 - ✅ **Windows Installer** - Professional installer with auto-start options and proper uninstall
 
 ## Installation
@@ -35,19 +36,41 @@ dotnet run
 
 ### Basic Usage
 1. **First Run**: Application starts in system tray
-2. **Activity Input**: Popup appears at configured intervals or double-click tray icon
-3. **Type & Activity**: Enter activity type and description, press Enter to save
-4. **History**: View grouped activities by date and type in the popup
+2. **Start Timer**: Double-click tray icon, enter activity details, press Enter or click START
+3. **Timer Running**: Real-time display shows elapsed time in tray and form title
+4. **Stop Timer**: Click STOP button to save activity and reset timer
+5. **History**: View grouped activities by date and type, edit with F2 key
 
 ### Tray Menu Options
-- **Input Activity Now** - Manual activity input
+- **Input Activity Now** - Manual timer start/activity input
 - **Export Log to Excel** - Export activities to Excel file
-- **Set Interval** - Configure popup reminder interval
+- **Set Interval** - Configure popup reminder interval (legacy)
+- **Exclude Times** - Configure break periods that auto-pause timer
 - **Don't show popup today** - Disable popups until tomorrow
 - **Check for Updates** - Manual update check with auto-download
-- **Clear History** - Delete all activity logs
 - **About** - Application information and features
-- **Test Timer** - Debug timer status
+- **Timer Information** - Debug timer status
+
+### Clockify-Style Timer
+The app now uses a manual timer system similar to Clockify:
+- **Enter Key**: Start timer with current activity details
+- **START/STOP Button**: Toggle timer state (blue=START, red=STOP)
+- **Real-time Display**: Shows elapsed time in tray icon and form title
+- **Automatic Midnight Split**: Activities crossing midnight are automatically split into separate days
+
+### Exclude Time Periods
+Configure break times that automatically pause/resume the timer:
+- **Setup**: Right-click tray → "Exclude Times" → Add periods (e.g., "Lunch: 12:00-13:00")
+- **Auto-Pause**: Timer stops at break start, saves current activity
+- **Auto-Resume**: Timer resumes after break with same activity
+- **Multiple Periods**: Support for lunch, coffee breaks, meetings, etc.
+
+### Activity Editing
+Edit activities on-the-fly with comprehensive editing capabilities:
+- **F2 Key**: Quick edit selected activity in history
+- **Right-click Menu**: Context menu with edit option
+- **Time-only Editing**: Modify start/end times while preserving dates
+- **Real-time Updates**: History refreshes automatically after edits
 
 ### Excel Export
 The export creates 3 worksheets:
@@ -110,11 +133,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Changelog
 
-### v1.9.2 (Latest)
-- Enhanced edit dialog functionality with comprehensive error handling
-- Improved timer information display (prioritizes next popup time)
-- Fixed edit dialog bugs and validation issues
-- Better error messages for troubleshooting
+### v2.0.0 (Latest)
+- **Clockify-Style Timer System**: Manual START/STOP button with real-time elapsed time display
+- **Automatic Midnight Splitting**: Activities crossing midnight automatically split for accurate daily tracking
+- **Exclude Time Periods**: Configure break times (lunch, coffee) that auto-pause/resume timer
+- **Enhanced Activity Editing**: F2 key and right-click editing with time-only modification
+- **Improved UI**: Taller About dialog and streamlined update notifications
+- **Smart Timer Management**: Seamless activity continuity across breaks and midnight boundaries
 
 ### v1.9.1
 - Comprehensive edit functionality for activity history
