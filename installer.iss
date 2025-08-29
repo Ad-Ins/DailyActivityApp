@@ -1,11 +1,11 @@
 ; Script Inno Setup untuk Adiners Daily Activity App
 [Setup]
 AppName=Adiners Daily Activity
-AppVersion={#GetFileVersion("publish\AdinersDailyActivityApp.exe")}
+AppVersion={#GetVersionNumbersString("publish\AdinersDailyActivityApp.exe")}
 DefaultDirName={autopf}\AdinersDailyActivity
 DefaultGroupName=Adiners Daily Activity
 OutputDir=installer-output
-OutputBaseFilename=DailyActivityApp-Setup-v{#GetFileVersion("publish\AdinersDailyActivityApp.exe")}
+OutputBaseFilename=DailyActivityApp-Setup-v{#GetVersionNumbersString("publish\AdinersDailyActivityApp.exe")}
 SetupIconFile=Assets\logo.ico
 Compression=lzma
 SolidCompression=yes
