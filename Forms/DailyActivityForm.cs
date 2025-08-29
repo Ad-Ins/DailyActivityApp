@@ -159,7 +159,7 @@ namespace AdinersDailyActivityApp
                     trayAppIcon = SystemIcons.Application;
                 }
             }
-            catch (Exception ex)
+            catch
             {
                 // Fallback to system icon if there's any error
                 trayAppIcon = SystemIcons.Application;
@@ -439,7 +439,7 @@ namespace AdinersDailyActivityApp
         {
             if (lstActivityHistory.SelectedItem != null)
             {
-                string selectedItemText = lstActivityHistory.SelectedItem!.ToString();
+                string selectedItemText = lstActivityHistory.SelectedItem.ToString() ?? "";
                 
                 // Check if it's a header (type group)
                 if (!selectedItemText.StartsWith("     "))
@@ -471,7 +471,7 @@ namespace AdinersDailyActivityApp
                         // Look backwards to find the header
                         for (int i = selectedIndex - 1; i >= 0; i--)
                         {
-                            string item = lstActivityHistory.Items[i].ToString();
+                            string item = lstActivityHistory.Items[i].ToString() ?? "";
                             if (!item.StartsWith("     ")) // Found header
                             {
                                 int headerBracketIndex = item.IndexOf(']');
@@ -1641,7 +1641,16 @@ namespace AdinersDailyActivityApp
                 string configDir = Path.GetDirectoryName(GetLogFilePath())!;
                 string excludeTimesPath = Path.Combine(configDir, "exclude_times.json");
                 
-                var json = System.Text.Json.JsonSerializer.Serialize(excludeTimes, new JsonSerializerOptions { WriteIndented = true });
+                // Convert to serializable format
+                var serializableData = excludeTimes.Select(et => new {
+                    StartHours = et.start.Hours,
+                    StartMinutes = et.start.Minutes,
+                    EndHours = et.end.Hours,
+                    EndMinutes = et.end.Minutes,
+                    Name = et.name
+                }).ToList();
+                
+                var json = System.Text.Json.JsonSerializer.Serialize(serializableData, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(excludeTimesPath, json);
             }
             catch { /* Ignore save errors */ }
@@ -1657,27 +1666,50 @@ namespace AdinersDailyActivityApp
                 if (File.Exists(excludeTimesPath))
                 {
                     string json = File.ReadAllText(excludeTimesPath);
-                    excludeTimes = System.Text.Json.JsonSerializer.Deserialize<List<(TimeSpan start, TimeSpan end, string name)>>(json) ?? new();
+                    var deserializedData = System.Text.Json.JsonSerializer.Deserialize<List<dynamic>>(json);
+                    
+                    if (deserializedData != null)
+                    {
+                        excludeTimes = new List<(TimeSpan start, TimeSpan end, string name)>();
+                        
+                        foreach (var item in deserializedData)
+                        {
+                            var jsonElement = (JsonElement)item;
+                            int startHours = jsonElement.GetProperty("StartHours").GetInt32();
+                            int startMinutes = jsonElement.GetProperty("StartMinutes").GetInt32();
+                            int endHours = jsonElement.GetProperty("EndHours").GetInt32();
+                            int endMinutes = jsonElement.GetProperty("EndMinutes").GetInt32();
+                            string name = jsonElement.GetProperty("Name").GetString() ?? "Break";
+                            
+                            var startTime = new TimeSpan(startHours, startMinutes, 0);
+                            var endTime = new TimeSpan(endHours, endMinutes, 0);
+                            
+                            excludeTimes.Add((startTime, endTime, name));
+                        }
+                    }
+                    else
+                    {
+                        SetDefaultExcludeTimes();
+                    }
                 }
                 else
                 {
-                    // Set default lunch break if no exclude times file exists
-                    excludeTimes = new List<(TimeSpan start, TimeSpan end, string name)>
-                    {
-                        (new TimeSpan(12, 0, 0), new TimeSpan(13, 0, 0), "Lunch Break")
-                    };
-                    SaveExcludeTimes(); // Save the default
+                    SetDefaultExcludeTimes();
                 }
             }
             catch 
             { 
-                // If there's an error, set default lunch break
-                excludeTimes = new List<(TimeSpan start, TimeSpan end, string name)>
-                {
-                    (new TimeSpan(12, 0, 0), new TimeSpan(13, 0, 0), "Lunch Break")
-                };
-                SaveExcludeTimes();
+                SetDefaultExcludeTimes();
             }
+        }
+        
+        private void SetDefaultExcludeTimes()
+        {
+            excludeTimes = new List<(TimeSpan start, TimeSpan end, string name)>
+            {
+                (new TimeSpan(12, 0, 0), new TimeSpan(13, 0, 0), "Lunch Break")
+            };
+            SaveExcludeTimes();
         }
         
         private void AutoSplitAtMidnight()

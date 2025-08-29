@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace AdinersDailyActivityApp.Dialog
@@ -205,6 +206,9 @@ namespace AdinersDailyActivityApp.Dialog
                     //     lblError.Text = "Login gagal.";
                     //     testPassed = false;
                     // }
+                    
+                    // Placeholder for async operation
+                    await Task.CompletedTask;
                 }
                 catch (Exception ex)
                 {
