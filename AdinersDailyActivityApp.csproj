@@ -6,13 +6,13 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>disable</ImplicitUsings>
-    <Version>2.0.1</Version>
-    <AssemblyVersion>2.0.1.0</AssemblyVersion>
-    <FileVersion>2.0.1.0</FileVersion>
+    <Version>2.0.3</Version>
+    <AssemblyVersion>2.0.3.0</AssemblyVersion>
+    <FileVersion>2.0.3.0</FileVersion>
     <ApplicationIcon>Assets\logo.ico</ApplicationIcon>
     <Product>Daily Activity App</Product>
-    <Company>PT Adicipta Invosi Teknologi</Company>
-    <Copyright>Copyright © PT Adicipta Invosi Teknologi 2024</Copyright>
+    <Company>AdIns (Advance Innovations) - PT. Adicipta Inovasi Teknologi</Company>
+    <Copyright>Copyright © AdIns (Advance Innovations) - PT. Adicipta Inovasi Teknologi 2024</Copyright>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>

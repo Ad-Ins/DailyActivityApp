@@ -2,7 +2,7 @@
 [Setup]
 AppName=Adiners Daily Activity
 AppVersion={#GetVersionNumbersString("publish\AdinersDailyActivityApp.exe")}
-AppPublisher=PT Adicipta Invosi Teknologi
+AppPublisher=AdIns (Advance Innovations) - PT. Adicipta Inovasi Teknologi
 AppPublisherURL=https://github.com/Ad-Ins/DailyActivityApp
 AppSupportURL=https://github.com/Ad-Ins/DailyActivityApp/issues
 AppUpdatesURL=https://github.com/Ad-Ins/DailyActivityApp/releases

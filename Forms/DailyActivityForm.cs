@@ -752,7 +752,7 @@ namespace AdinersDailyActivityApp
             
             Label copyrightLabel = new Label
             {
-                Text = "© 2024 PT Adicipta Invosi Teknologi\nDeveloped by LJP",
+                Text = "© 2024 AdIns (Advance Innovations) - PT. Adicipta Inovasi Teknologi\nDeveloped by LJP",
                 Location = new Point(240, 330),
                 Size = new Size(200, 40),
                 ForeColor = Color.FromArgb(150, 150, 150),
