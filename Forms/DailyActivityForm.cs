@@ -133,7 +133,7 @@ namespace AdinersDailyActivityApp
             trayMenu.Items.Add(dontShowMenuItem);
             trayMenu.Items.Add("-");
             trayMenu.Items.Add("Check for Updates", null, OnCheckUpdatesClicked);
-            trayMenu.Items.Add("Clear History", null, OnClearHistoryClicked);
+            // trayMenu.Items.Add("Clear History", null, OnClearHistoryClicked); // Temporarily hidden
             trayMenu.Items.Add("-");
             trayMenu.Items.Add("About", null, OnAboutClicked);
             trayMenu.Items.Add("Exit", null, OnExitClicked);
