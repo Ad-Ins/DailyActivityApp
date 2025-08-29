@@ -764,7 +764,7 @@ namespace AdinersDailyActivityApp
                 }
                 else
                 {
-                    // Sub-item edit - extract data and remove from log
+                    // Sub-item edit - open edit dialog
                     int closingBracketIndex = selectedItem.IndexOf(']');
                     if (closingBracketIndex != -1)
                     {
@@ -805,23 +805,34 @@ namespace AdinersDailyActivityApp
                                 
                                 if (!string.IsNullOrEmpty(dateStr))
                                 {
+                                    string startStr = timeParts[0];
                                     string endStr = timeParts[1];
-                                    if (DateTime.TryParseExact($"{dateStr} {endStr}", "dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime timestamp))
+                                    
+                                    if (DateTime.TryParseExact($"{dateStr} {startStr}", "dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime startTime) &&
+                                        DateTime.TryParseExact($"{dateStr} {endStr}", "dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime endTime))
                                     {
                                         string activity = selectedItem.Substring(closingBracketIndex + 1).Trim();
                                         
-                                        // Create log entry to remove
-                                        string logEntry = $"[{timestamp.ToString(CultureInfo.InvariantCulture)}] {type} | {activity}";
+                                        // Create original log entry to remove
+                                        string originalLogEntry = $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {type} | {activity}";
                                         
-                                        // Set form values
-                                        cmbType.Text = type;
-                                        cmbType.ForeColor = Color.White;
-                                        txtActivity.Text = activity;
-                                        txtActivity.ForeColor = Color.White;
-                                        
-                                        // Remove from display and log file
-                                        RemoveActivityFromLogFile(logEntry);
-                                        LoadLogHistory(); // Refresh display
+                                        // Open edit dialog
+                                        using (var editDialog = new EditActivityDialog(startTime, endTime, type, activity))
+                                        {
+                                            if (editDialog.ShowDialog() == DialogResult.OK)
+                                            {
+                                                // Remove original entry
+                                                RemoveActivityFromLogFile(originalLogEntry);
+                                                
+                                                // Add new entry
+                                                string newLogEntry = $"[{editDialog.EndTime.ToString(CultureInfo.InvariantCulture)}] {editDialog.ActivityType} | {editDialog.ActivityText}";
+                                                string logFilePath = GetLogFilePath();
+                                                File.AppendAllText(logFilePath, newLogEntry + Environment.NewLine);
+                                                
+                                                // Refresh display
+                                                LoadLogHistory();
+                                            }
+                                        }
                                     }
                                 }
                             }

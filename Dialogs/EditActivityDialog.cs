@@ -1,249 +1,176 @@
 using System;
 using System.Drawing;
+using System.Globalization;
 using System.Windows.Forms;
 
-namespace AdinersDailyActivityApp.Dialog
+namespace AdinersDailyActivityApp.Dialogs
 {
-    public class EditActivityDialog : Form
+    public partial class EditActivityDialog : Form
     {
-        public string StartTime => txtStart.Text.Trim();
-        public string EndTime => txtEnd.Text.Trim();
-        public string ActivityType => cmbType.SelectedItem?.ToString() ?? "Others";
-        public string Activity => txtActivity.Text.Trim();
+        public DateTime StartTime { get; private set; }
+        public DateTime EndTime { get; private set; }
+        public string ActivityType { get; private set; } = "";
+        public string ActivityText { get; private set; } = "";
 
-        private TextBox txtStart, txtEnd, txtActivity;
-        private ComboBox cmbType;
-        private Label lblError;
+        private DateTimePicker dtpStartTime;
+        private DateTimePicker dtpEndTime;
+        private TextBox txtType;
+        private TextBox txtActivity;
+        private Button btnSave;
+        private Button btnCancel;
 
-        public EditActivityDialog(string start, string end, string type, string activity, bool fullscreen = false)
+        public EditActivityDialog(DateTime startTime, DateTime endTime, string type, string activity)
         {
-            // --- FORM SETUP ---
+            StartTime = startTime;
+            EndTime = endTime;
+            ActivityType = type;
+            ActivityText = activity;
+            InitializeComponent();
+        }
+
+        private void InitializeComponent()
+        {
+            this.Size = new Size(450, 280);
             this.Text = "Edit Activity";
+            this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
-            this.StartPosition = FormStartPosition.CenterParent;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
-            this.ControlBox = true;
-            this.ShowInTaskbar = false;
-            this.TopMost = true;
-            this.BackColor = Color.FromArgb(24, 24, 32);
-            this.Width = 700;
-            this.Height = 420;
+            this.BackColor = Color.FromArgb(30, 30, 30);
+            this.ForeColor = Color.White;
 
-            // --- LAYOUT SETUP ---
-            var layout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                RowCount = 6,
-                ColumnCount = 2,
-                Padding = new Padding(40, 30, 40, 30),
-                BackColor = this.BackColor
-            };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
-
-            // --- LABEL & INPUT STYLE ---
-            Font labelFont = new Font("Segoe UI", 15F, FontStyle.Bold);
-            Font inputFont = new Font("Segoe UI", 15F, FontStyle.Regular);
-            Color labelColor = Color.WhiteSmoke;
-            Color inputBack = Color.FromArgb(36, 36, 48);
-            Color inputFore = Color.White;
-
-            // --- START TIME ---
+            // Start Time
             var lblStart = new Label
             {
-                Text = "Start Time (HH:mm)",
-                Font = labelFont,
-                ForeColor = labelColor,
-                BackColor = this.BackColor,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Dock = DockStyle.Fill
-            };
-            txtStart = new TextBox
-            {
-                Text = start,
-                Font = inputFont,
-                BackColor = inputBack,
-                ForeColor = inputFore,
-                BorderStyle = BorderStyle.FixedSingle,
-                Dock = DockStyle.Fill
+                Text = "Start Time:",
+                Location = new Point(20, 20),
+                Size = new Size(80, 20),
+                ForeColor = Color.White
             };
 
-            // --- END TIME ---
+            dtpStartTime = new DateTimePicker
+            {
+                Format = DateTimePickerFormat.Custom,
+                CustomFormat = "dd/MM/yyyy HH:mm",
+                Location = new Point(110, 18),
+                Size = new Size(150, 25),
+                Value = StartTime,
+                BackColor = Color.FromArgb(45, 45, 45),
+                ForeColor = Color.White
+            };
+
+            // End Time
             var lblEnd = new Label
             {
-                Text = "End Time (HH:mm)",
-                Font = labelFont,
-                ForeColor = labelColor,
-                BackColor = this.BackColor,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Dock = DockStyle.Fill
-            };
-            txtEnd = new TextBox
-            {
-                Text = end,
-                Font = inputFont,
-                BackColor = inputBack,
-                ForeColor = inputFore,
-                BorderStyle = BorderStyle.FixedSingle,
-                Dock = DockStyle.Fill
+                Text = "End Time:",
+                Location = new Point(20, 55),
+                Size = new Size(80, 20),
+                ForeColor = Color.White
             };
 
-            // --- TYPE ---
+            dtpEndTime = new DateTimePicker
+            {
+                Format = DateTimePickerFormat.Custom,
+                CustomFormat = "dd/MM/yyyy HH:mm",
+                Location = new Point(110, 53),
+                Size = new Size(150, 25),
+                Value = EndTime,
+                BackColor = Color.FromArgb(45, 45, 45),
+                ForeColor = Color.White
+            };
+
+            // Type
             var lblType = new Label
             {
-                Text = "Type",
-                Font = labelFont,
-                ForeColor = labelColor,
-                BackColor = this.BackColor,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Dock = DockStyle.Fill
+                Text = "Type:",
+                Location = new Point(20, 90),
+                Size = new Size(80, 20),
+                ForeColor = Color.White
             };
-            cmbType = new ComboBox
-            {
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Font = inputFont,
-                BackColor = inputBack,
-                ForeColor = inputFore,
-                FlatStyle = FlatStyle.Flat,
-                Dock = DockStyle.Fill
-            };
-            cmbType.Items.AddRange(new object[] { "NON-JIRA", "Others", "JIRA-001" });
-            cmbType.SelectedItem = type;
-            if (cmbType.SelectedIndex < 0) cmbType.SelectedIndex = 0;
 
-            // --- ACTIVITY ---
+            txtType = new TextBox
+            {
+                Text = ActivityType,
+                Location = new Point(110, 88),
+                Size = new Size(300, 25),
+                BackColor = Color.FromArgb(45, 45, 45),
+                ForeColor = Color.White,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            // Activity
             var lblActivity = new Label
             {
-                Text = "Activity",
-                Font = labelFont,
-                ForeColor = labelColor,
-                BackColor = this.BackColor,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Dock = DockStyle.Fill
+                Text = "Activity:",
+                Location = new Point(20, 125),
+                Size = new Size(80, 20),
+                ForeColor = Color.White
             };
+
             txtActivity = new TextBox
             {
-                Text = activity,
-                Font = inputFont,
-                BackColor = inputBack,
-                ForeColor = inputFore,
-                BorderStyle = BorderStyle.FixedSingle,
-                Dock = DockStyle.Fill
-            };
-
-            // --- ERROR LABEL ---
-            lblError = new Label
-            {
-                ForeColor = Color.OrangeRed,
-                Text = "",
-                Font = new Font("Segoe UI", 12F, FontStyle.Italic),
-                BackColor = this.BackColor,
-                Dock = DockStyle.Fill,
-                Height = 28,
-                TextAlign = ContentAlignment.MiddleCenter
-            };
-
-            // --- BUTTON PANEL ---
-            var btnPanel = new FlowLayoutPanel
-            {
-                FlowDirection = FlowDirection.RightToLeft,
-                Dock = DockStyle.Fill,
-                Padding = new Padding(0, 10, 0, 0),
-                BackColor = this.BackColor,
-                Height = 60
-            };
-            var btnOK = new Button
-            {
-                Text = "OK",
-                Width = 140,
-                Height = 44,
-                DialogResult = DialogResult.OK,
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(70, 130, 180),
+                Text = ActivityText,
+                Location = new Point(110, 123),
+                Size = new Size(300, 60),
+                BackColor = Color.FromArgb(45, 45, 45),
                 ForeColor = Color.White,
-                Font = new Font("Segoe UI", 16F, FontStyle.Bold)
+                BorderStyle = BorderStyle.FixedSingle,
+                Multiline = true
             };
-            btnOK.FlatAppearance.BorderSize = 0;
 
-            var btnCancel = new Button
+            // Buttons
+            btnSave = new Button
+            {
+                Text = "Save",
+                Size = new Size(80, 30),
+                Location = new Point(250, 200),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(0, 120, 215),
+                ForeColor = Color.White,
+                DialogResult = DialogResult.OK
+            };
+            btnSave.FlatAppearance.BorderSize = 0;
+            btnSave.Click += BtnSave_Click;
+
+            btnCancel = new Button
             {
                 Text = "Cancel",
-                Width = 140,
-                Height = 44,
-                DialogResult = DialogResult.Cancel,
+                Size = new Size(80, 30),
+                Location = new Point(340, 200),
                 FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(60, 60, 70),
+                BackColor = Color.FromArgb(50, 50, 50),
                 ForeColor = Color.White,
-                Font = new Font("Segoe UI", 16F, FontStyle.Bold)
+                DialogResult = DialogResult.Cancel
             };
             btnCancel.FlatAppearance.BorderSize = 0;
 
-            btnPanel.Controls.Add(btnOK);
-            btnPanel.Controls.Add(btnCancel);
+            this.Controls.AddRange(new Control[] {
+                lblStart, dtpStartTime, lblEnd, dtpEndTime,
+                lblType, txtType, lblActivity, txtActivity,
+                btnSave, btnCancel
+            });
+        }
 
-            // --- ADD TO LAYOUT ---
-            layout.Controls.Add(lblStart, 0, 0);
-            layout.Controls.Add(txtStart, 1, 0);
-            layout.Controls.Add(lblEnd, 0, 1);
-            layout.Controls.Add(txtEnd, 1, 1);
-            layout.Controls.Add(lblType, 0, 2);
-            layout.Controls.Add(cmbType, 1, 2);
-            layout.Controls.Add(lblActivity, 0, 3);
-            layout.Controls.Add(txtActivity, 1, 3);
-            layout.Controls.Add(lblError, 0, 4);
-            layout.SetColumnSpan(lblError, 2);
-            layout.Controls.Add(btnPanel, 0, 5);
-            layout.SetColumnSpan(btnPanel, 2);
-
-            this.Controls.Add(layout);
-            this.AcceptButton = btnOK;
-            this.CancelButton = btnCancel;
-
-            // --- VALIDASI INPUT ---
-            btnOK.Click += (s, e) =>
+        private void BtnSave_Click(object? sender, EventArgs e)
+        {
+            if (dtpEndTime.Value <= dtpStartTime.Value)
             {
-                if (!TimeSpan.TryParse(txtStart.Text, out var _))
-                {
-                    lblError.Text = "Format Start Time salah (contoh: 08:00)";
-                    this.DialogResult = DialogResult.None;
-                    return;
-                }
-                if (!TimeSpan.TryParse(txtEnd.Text, out var _))
-                {
-                    lblError.Text = "Format End Time salah (contoh: 09:00)";
-                    this.DialogResult = DialogResult.None;
-                    return;
-                }
-                if (TimeSpan.Parse(txtEnd.Text) <= TimeSpan.Parse(txtStart.Text))
-                {
-                    lblError.Text = "End Time harus lebih besar dari Start Time";
-                    this.DialogResult = DialogResult.None;
-                    return;
-                }
-                if (string.IsNullOrWhiteSpace(txtActivity.Text))
-                {
-                    lblError.Text = "Activity tidak boleh kosong";
-                    this.DialogResult = DialogResult.None;
-                    return;
-                }
-                lblError.Text = "";
-            };
+                MessageBox.Show("End time must be after start time!", "Invalid Time", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
 
-            // Blok Alt+F4 dan tombol close
-            this.FormClosing += (s, e) =>
+            if (string.IsNullOrWhiteSpace(txtActivity.Text))
             {
-                if (this.DialogResult != DialogResult.OK && this.DialogResult != DialogResult.Cancel)
-                {
-                    e.Cancel = true;
-                }
-            };
+                MessageBox.Show("Activity cannot be empty!", "Invalid Activity", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            StartTime = dtpStartTime.Value;
+            EndTime = dtpEndTime.Value;
+            ActivityType = txtType.Text.Trim();
+            ActivityText = txtActivity.Text.Trim();
         }
     }
 }
