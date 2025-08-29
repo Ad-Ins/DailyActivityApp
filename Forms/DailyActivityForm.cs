@@ -394,11 +394,33 @@ namespace AdinersDailyActivityApp
                 }
                 else
                 {
-                    // Sub-item: extract activity only
+                    // Sub-item: extract activity and find type from header
                     int closingBracketIndex = selectedItemText.IndexOf(']');
                     if (closingBracketIndex != -1)
                     {
                         string activity = selectedItemText.Substring(closingBracketIndex + 1).Trim();
+                        
+                        // Find the header (type) for this sub-item
+                        int selectedIndex = lstActivityHistory.SelectedIndex;
+                        string type = "";
+                        
+                        // Look backwards to find the header
+                        for (int i = selectedIndex - 1; i >= 0; i--)
+                        {
+                            string item = lstActivityHistory.Items[i].ToString();
+                            if (!item.StartsWith("     ")) // Found header
+                            {
+                                int headerBracketIndex = item.IndexOf(']');
+                                if (headerBracketIndex != -1)
+                                {
+                                    type = item.Substring(headerBracketIndex + 1).Trim();
+                                }
+                                break;
+                            }
+                        }
+                        
+                        cmbType.Text = type;
+                        cmbType.ForeColor = Color.White;
                         txtActivity.Text = activity;
                         txtActivity.ForeColor = Color.White;
                     }
@@ -563,32 +585,83 @@ namespace AdinersDailyActivityApp
             if (lstActivityHistory.SelectedItem != null)
             {
                 string selectedItem = lstActivityHistory.SelectedItem!.ToString();
-                int closingBracketIndex = selectedItem.IndexOf(']');
-                if (closingBracketIndex != -1)
+                int selectedIndex = lstActivityHistory.SelectedIndex;
+                
+                // Check if it's a header (type group)
+                if (!selectedItem.StartsWith("     "))
                 {
-                    string inside = selectedItem.Substring(1, closingBracketIndex - 1);
-                    string[] parts = inside.Split('|').Select(p => p.Trim()).ToArray();
-                    if (parts.Length == 2) // Untuk sub-item [time range | dur]
+                    // Header edit - just copy type to input
+                    int closingBracketIndex = selectedItem.IndexOf(']');
+                    if (closingBracketIndex != -1)
                     {
-                        string timesStr = parts[0];
-                        string[] timeParts = timesStr.Split('-').Select(t => t.Trim()).ToArray();
-                        if (timeParts.Length == 2)
+                        string type = selectedItem.Substring(closingBracketIndex + 1).Trim();
+                        cmbType.Text = type;
+                        cmbType.ForeColor = Color.White;
+                        txtActivity.Text = ActivityHint;
+                        txtActivity.ForeColor = Color.FromArgb(180, 180, 180);
+                    }
+                }
+                else
+                {
+                    // Sub-item edit - extract data and remove from log
+                    int closingBracketIndex = selectedItem.IndexOf(']');
+                    if (closingBracketIndex != -1)
+                    {
+                        string inside = selectedItem.Substring(1, closingBracketIndex - 1);
+                        string[] parts = inside.Split('|').Select(p => p.Trim()).ToArray();
+                        
+                        if (parts.Length == 2) // [time range | duration]
                         {
-                            string dateStr = lstActivityHistory.Items.Cast<string>().FirstOrDefault(i => i.StartsWith("[") && !i.StartsWith("     "))?.Substring(1, 10); // Ambil date dari header
-                            if (dateStr != null)
+                            string timesStr = parts[0];
+                            string[] timeParts = timesStr.Split('-').Select(t => t.Trim()).ToArray();
+                            
+                            if (timeParts.Length == 2)
                             {
-                                string endStr = timeParts[1];
-                                if (DateTime.TryParseExact($"{dateStr} {endStr}", "dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime timestamp))
+                                // Find date from header and type
+                                string dateStr = "";
+                                string type = "";
+                                
+                                // Look backwards to find the header
+                                for (int i = selectedIndex - 1; i >= 0; i--)
                                 {
-                                    string fullText = selectedItem.Substring(closingBracketIndex + 1).Trim();
-                                    int colonIndex = fullText.IndexOf(':');
-                                    string type = colonIndex > 0 ? fullText.Substring(0, colonIndex).Trim() : "";
-                                    string activity = colonIndex > 0 ? fullText.Substring(colonIndex + 1).Trim() : fullText;
-                                    string logEntry = $"[{timestamp.ToString(CultureInfo.InvariantCulture)}] {type} | {activity}";
-                                    cmbType.Text = type;
-                                    txtActivity.Text = activity;
-                                    lstActivityHistory.Items.Remove(selectedItem);
-                                    RemoveActivityFromLogFile(logEntry);
+                                    string item = lstActivityHistory.Items[i].ToString();
+                                    if (!item.StartsWith("     ")) // Found header
+                                    {
+                                        int headerBracketIndex = item.IndexOf(']');
+                                        if (headerBracketIndex != -1)
+                                        {
+                                            string headerInside = item.Substring(1, headerBracketIndex - 1);
+                                            string[] headerParts = headerInside.Split('|').Select(p => p.Trim()).ToArray();
+                                            if (headerParts.Length == 2)
+                                            {
+                                                dateStr = headerParts[0]; // dd/MM/yyyy
+                                                type = item.Substring(headerBracketIndex + 1).Trim();
+                                            }
+                                        }
+                                        break;
+                                    }
+                                }
+                                
+                                if (!string.IsNullOrEmpty(dateStr))
+                                {
+                                    string endStr = timeParts[1];
+                                    if (DateTime.TryParseExact($"{dateStr} {endStr}", "dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime timestamp))
+                                    {
+                                        string activity = selectedItem.Substring(closingBracketIndex + 1).Trim();
+                                        
+                                        // Create log entry to remove
+                                        string logEntry = $"[{timestamp.ToString(CultureInfo.InvariantCulture)}] {type} | {activity}";
+                                        
+                                        // Set form values
+                                        cmbType.Text = type;
+                                        cmbType.ForeColor = Color.White;
+                                        txtActivity.Text = activity;
+                                        txtActivity.ForeColor = Color.White;
+                                        
+                                        // Remove from display and log file
+                                        RemoveActivityFromLogFile(logEntry);
+                                        LoadLogHistory(); // Refresh display
+                                    }
                                 }
                             }
                         }
