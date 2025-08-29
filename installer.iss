@@ -39,7 +39,7 @@ Filename: "{app}\AdinersDailyActivityApp.exe"; Description: "Launch Adiners Dail
 ; Force auto-start with 1 minute delay for Windows startup
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
     ValueType: string; ValueName: "AdinersDailyActivity"; \
-    ValueData: "cmd /c timeout /t 60 /nobreak >nul && ""{app}\AdinersDailyActivityApp.exe""""; \
+    ValueData: "cmd /c timeout /t 60 /nobreak >nul && ""{app}\AdinersDailyActivityApp.exe"""; \
     Flags: uninsdeletevalue
 
 [Tasks]
