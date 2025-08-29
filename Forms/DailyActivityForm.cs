@@ -746,6 +746,7 @@ namespace AdinersDailyActivityApp
                        "• Automatic midnight activity splitting\n" +
                        "• Exclude time periods (lunch, breaks)\n" +
                        "• On-the-fly activity editing (F2)\n" +
+                       "• Delete activities with F3 key\n" +
                        "• Smart activity type management\n" +
                        "• Excel export with detailed reports\n" +
                        "• Overtime tracking and analysis\n" +

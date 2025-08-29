@@ -8,6 +8,7 @@ A modern Windows application for tracking daily activities with automatic remind
 - ✅ **Automatic Midnight Splitting** - Activities automatically split at 00:00 for accurate daily tracking
 - ✅ **Exclude Time Periods** - Configure break times (lunch, coffee) that auto-pause/resume timer
 - ✅ **On-the-Fly Editing** - Edit activity times and details with F2 key or right-click menu
+- ✅ **Delete Activities** - Remove incorrect activities with F3 key or right-click menu
 - ✅ **Smart Type Management** - Remember and suggest activity types from history
 - ✅ **Excel Export** - Export to Excel with 3 sheets: Detailed Log, Summary by Type, and Overtime tracking
 - ✅ **Overtime Detection** - Automatically detect weekend work and after-hours activities
@@ -65,12 +66,14 @@ Configure break times that automatically pause/resume the timer:
 - **Auto-Resume**: Timer resumes after break with same activity
 - **Multiple Periods**: Support for lunch, coffee breaks, meetings, etc.
 
-### Activity Editing
-Edit activities on-the-fly with comprehensive editing capabilities:
+### Activity Management
+Edit and delete activities on-the-fly with comprehensive management capabilities:
 - **F2 Key**: Quick edit selected activity in history
-- **Right-click Menu**: Context menu with edit option
+- **F3 Key**: Quick delete selected activity with confirmation
+- **Right-click Menu**: Context menu with edit and delete options
 - **Time-only Editing**: Modify start/end times while preserving dates
-- **Real-time Updates**: History refreshes automatically after edits
+- **Safe Deletion**: Confirmation dialog prevents accidental deletions
+- **Real-time Updates**: History refreshes automatically after edits or deletions
 
 ### Excel Export
 The export creates 3 worksheets:
@@ -133,7 +136,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Changelog
 
-### v2.0.0 (Latest)
+### v2.0.4 (Latest)
+- **Delete Activity Feature**: F3 key and right-click menu to delete incorrect activities with confirmation
+- **Streamlined Update Dialog**: Removed "Open GitHub" button for cleaner update experience
+- **Enhanced Activity Management**: Complete edit and delete functionality for activity history
+
+### v2.0.0
 - **Clockify-Style Timer System**: Manual START/STOP button with real-time elapsed time display
 - **Automatic Midnight Splitting**: Activities crossing midnight automatically split for accurate daily tracking
 - **Exclude Time Periods**: Configure break times (lunch, coffee) that auto-pause/resume timer
