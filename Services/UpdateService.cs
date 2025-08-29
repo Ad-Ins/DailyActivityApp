@@ -1,11 +1,13 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.ComponentModel;
 
 namespace AdinersDailyActivityApp.Services
 {
@@ -68,6 +70,49 @@ namespace AdinersDailyActivityApp.Services
             catch
             {
                 return false;
+            }
+        }
+        
+        public static async Task<string?> DownloadUpdateAsync(GitHubRelease release, IProgress<int>? progress = null)
+        {
+            try
+            {
+                var setupAsset = release.assets?.FirstOrDefault(a => a.name?.Contains("Setup") == true);
+                if (setupAsset?.browser_download_url == null) return null;
+                
+                string tempPath = Path.Combine(Path.GetTempPath(), setupAsset.name!);
+                
+                using var client = new HttpClient();
+                client.DefaultRequestHeaders.Add("User-Agent", "DailyActivityApp-UpdateChecker");
+                
+                using var response = await client.GetAsync(setupAsset.browser_download_url, HttpCompletionOption.ResponseHeadersRead);
+                response.EnsureSuccessStatusCode();
+                
+                var totalBytes = response.Content.Headers.ContentLength ?? 0;
+                using var contentStream = await response.Content.ReadAsStreamAsync();
+                using var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
+                
+                var buffer = new byte[8192];
+                long totalRead = 0;
+                int bytesRead;
+                
+                while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                {
+                    await fileStream.WriteAsync(buffer, 0, bytesRead);
+                    totalRead += bytesRead;
+                    
+                    if (totalBytes > 0)
+                    {
+                        var progressPercentage = (int)((totalRead * 100) / totalBytes);
+                        progress?.Report(progressPercentage);
+                    }
+                }
+                
+                return tempPath;
+            }
+            catch
+            {
+                return null;
             }
         }
         

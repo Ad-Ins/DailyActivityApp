@@ -11,6 +11,7 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 using ClosedXML.Excel;
 using AdinersDailyActivityApp.Dialog;
+using AdinersDailyActivityApp.Dialogs;
 using AdinersDailyActivityApp.Services;
 
 namespace AdinersDailyActivityApp
@@ -507,23 +508,27 @@ namespace AdinersDailyActivityApp
             }
         }
         
-        private async void OnCheckUpdatesClicked(object? sender, EventArgs e)
+        private void OnCheckUpdatesClicked(object? sender, EventArgs e)
         {
             trayIcon.ShowBalloonTip(2000, "Checking Updates", "Checking for updates...", ToolTipIcon.Info);
             
-            var hasUpdate = await UpdateService.CheckForUpdatesAsync();
-            if (hasUpdate)
+            // Run async without blocking
+            _ = Task.Run(async () =>
             {
-                var release = await UpdateService.GetLatestReleaseAsync();
-                if (release != null)
+                var hasUpdate = await UpdateService.CheckForUpdatesAsync();
+                if (hasUpdate)
                 {
-                    ShowUpdateNotification(release, true);
+                    var release = await UpdateService.GetLatestReleaseAsync();
+                    if (release != null)
+                    {
+                        this.Invoke(() => ShowUpdateDialog(release));
+                    }
                 }
-            }
-            else
-            {
-                ShowDarkMessageBox($"You are using the latest version ({UpdateService.CurrentVersion})", "No Updates Available");
-            }
+                else
+                {
+                    this.Invoke(() => ShowDarkMessageBox($"You are using the latest version ({UpdateService.CurrentVersion})", "No Updates Available"));
+                }
+            });
         }
         
         private async Task CheckForUpdatesOnStartup()
@@ -539,7 +544,7 @@ namespace AdinersDailyActivityApp
                 var release = await UpdateService.GetLatestReleaseAsync();
                 if (release != null)
                 {
-                    this.Invoke(() => ShowUpdateNotification(release, false));
+                    this.Invoke(() => ShowUpdateDialog(release));
                 }
             }
             
@@ -547,19 +552,10 @@ namespace AdinersDailyActivityApp
             config.Save();
         }
         
-        private void ShowUpdateNotification(GitHubRelease release, bool isManualCheck)
+        private void ShowUpdateDialog(GitHubRelease release)
         {
-            string message = $"New version available: {release.tag_name}\n\n" +
-                           $"Current version: {UpdateService.CurrentVersion}\n" +
-                           $"Released: {release.published_at:dd/MM/yyyy}\n\n" +
-                           $"Would you like to download the update?";
-            
-            var result = ShowDarkMessageBox(message, "Update Available", MessageBoxButtons.YesNo);
-            
-            if (result == DialogResult.Yes)
-            {
-                UpdateService.OpenDownloadPage();
-            }
+            var updateDialog = new UpdateDialog(release);
+            updateDialog.Show(); // Non-blocking
         }
 
         private void OnEditHistoryClicked(object? sender, EventArgs e)
