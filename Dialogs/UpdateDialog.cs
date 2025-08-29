@@ -14,7 +14,7 @@ namespace AdinersDailyActivityApp.Dialogs
         private ProgressBar progressBar = null!;
         private Button btnDownload = null!;
         private Button btnLater = null!;
-        private Button btnOpenGitHub = null!;
+
         private Label lblProgress = null!;
         private bool isDownloading = false;
 
@@ -80,18 +80,6 @@ namespace AdinersDailyActivityApp.Dialogs
             btnDownload.FlatAppearance.BorderSize = 0;
             btnDownload.Click += BtnDownload_Click;
 
-            btnOpenGitHub = new Button
-            {
-                Text = "Open GitHub",
-                Size = new Size(100, 30),
-                Location = new Point(150, 210),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(50, 50, 50),
-                ForeColor = Color.White
-            };
-            btnOpenGitHub.FlatAppearance.BorderSize = 0;
-            btnOpenGitHub.Click += BtnOpenGitHub_Click;
-
             btnLater = new Button
             {
                 Text = "Later",
@@ -104,7 +92,7 @@ namespace AdinersDailyActivityApp.Dialogs
             };
             btnLater.FlatAppearance.BorderSize = 0;
 
-            this.Controls.AddRange(new Control[] { lblMessage, progressBar, lblProgress, btnDownload, btnOpenGitHub, btnLater });
+            this.Controls.AddRange(new Control[] { lblMessage, progressBar, lblProgress, btnDownload, btnLater });
         }
 
         private async void BtnDownload_Click(object? sender, EventArgs e)
@@ -113,7 +101,6 @@ namespace AdinersDailyActivityApp.Dialogs
 
             isDownloading = true;
             btnDownload.Enabled = false;
-            btnOpenGitHub.Enabled = false;
             progressBar.Visible = true;
             lblProgress.Visible = true;
             lblProgress.Text = "Downloading...";
@@ -149,7 +136,6 @@ namespace AdinersDailyActivityApp.Dialogs
                 {
                     lblProgress.Text = "Download failed. Please try again.";
                     btnDownload.Enabled = true;
-                    btnOpenGitHub.Enabled = true;
                     isDownloading = false;
                 }
             }
@@ -157,15 +143,10 @@ namespace AdinersDailyActivityApp.Dialogs
             {
                 lblProgress.Text = $"Error: {ex.Message}";
                 btnDownload.Enabled = true;
-                btnOpenGitHub.Enabled = true;
                 isDownloading = false;
             }
         }
 
-        private void BtnOpenGitHub_Click(object? sender, EventArgs e)
-        {
-            UpdateService.OpenDownloadPage();
-            this.Close();
-        }
+
     }
 }
