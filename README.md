@@ -10,16 +10,18 @@ A modern Windows application for tracking daily activities with automatic remind
 - ✅ **Overtime Detection** - Automatically detect weekend work and after-hours activities
 - ✅ **Dark Mode UI** - Modern dark theme with rounded panels and flat design
 - ✅ **Flexible Popup Control** - "Don't show popup today" option with daily reset
-- ✅ **Auto-Update** - Automatic update notifications from GitHub releases
-- ✅ **History Management** - View, edit, and clear activity history
+- ✅ **Auto-Update** - Automatic update notifications with auto-download from GitHub releases
+- ✅ **History Management** - View, edit, and clear activity history with comprehensive edit dialog
 - ✅ **Lunch Reminders** - Special popup at lunch time (12:00-12:15)
+- ✅ **Windows Installer** - Professional installer with auto-start options and proper uninstall
 
 ## Installation
 
 ### Download Latest Release
 1. Go to [Releases](https://github.com/Ad-Ins/DailyActivityApp/releases/latest)
-2. Download `DailyActivityApp-vX.X.X.zip`
-3. Extract and run `AdinersDailyActivityApp.exe` (single file, no installation needed)
+2. Download `DailyActivityApp-Setup-vX.X.X.exe` (Windows Installer)
+3. Run installer and follow setup wizard
+4. Application will start automatically and appear in system tray
 
 ### Build from Source
 ```bash
@@ -42,8 +44,9 @@ dotnet run
 - **Export Log to Excel** - Export activities to Excel file
 - **Set Interval** - Configure popup reminder interval
 - **Don't show popup today** - Disable popups until tomorrow
-- **Check for Updates** - Manual update check
+- **Check for Updates** - Manual update check with auto-download
 - **Clear History** - Delete all activity logs
+- **About** - Application information and features
 - **Test Timer** - Debug timer status
 
 ### Excel Export
@@ -75,9 +78,9 @@ The app automatically checks for updates daily and shows notifications when new 
 
 3. **GitHub Actions** will automatically:
    - Build the application
-   - Create a ZIP file
+   - Create Windows installer with Inno Setup
    - Create a GitHub release
-   - Users will get update notifications
+   - Users will get update notifications with auto-download
 
 ## Configuration
 
@@ -107,7 +110,37 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Changelog
 
-### v1.4.0 (Latest)
+### v1.9.2 (Latest)
+- Enhanced edit dialog functionality with comprehensive error handling
+- Improved timer information display (prioritizes next popup time)
+- Fixed edit dialog bugs and validation issues
+- Better error messages for troubleshooting
+
+### v1.9.1
+- Comprehensive edit functionality for activity history
+- Edit dialog with start/end time modification
+- Enhanced validation and error handling
+- Improved user experience for history management
+
+### v1.8.0
+- Windows Installer with Inno Setup
+- Professional installation experience
+- Auto-start options and desktop shortcuts
+- Publisher information (PT Adicipta Invosi Teknologi)
+- Proper uninstall functionality
+
+### v1.7.0
+- Auto-download feature for updates
+- Non-blocking update dialogs
+- Progress bar for download status
+- Enhanced update user experience
+
+### v1.6.0
+- About dialog with comprehensive app information
+- Developer and company information display
+- Feature overview in About section
+
+### v1.4.0
 - Single executable file (no .NET Runtime required)
 - Self-contained deployment (~149MB)
 - Portable application - no installation needed
