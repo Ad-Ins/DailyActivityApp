@@ -154,7 +154,7 @@ namespace AdinersDailyActivityApp
             historyContextMenu = new ContextMenuStrip();
             historyContextMenu.BackColor = Color.FromArgb(30, 30, 30);
             historyContextMenu.ForeColor = Color.White;
-            historyContextMenu.Items.Add("Edit", null, OnEditHistoryClicked);
+            // historyContextMenu.Items.Add("Edit", null, OnEditHistoryClicked); // Temporarily disabled
             lstActivityHistory.ContextMenuStrip = historyContextMenu;
         }
 
