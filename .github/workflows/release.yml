@@ -28,25 +28,70 @@ jobs:
       
     - name: Setup Inno Setup
       run: |
-        Invoke-WebRequest -Uri "https://files.jrsoftware.org/is/6/innosetup-6.2.2.exe" -OutFile "innosetup.exe"
-        Start-Process -FilePath "innosetup.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+        choco install innosetup -y
+      
+    - name: Verify Inno Setup Installation
+      run: |
+        if (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe") {
+          echo "Inno Setup found"
+        } else {
+          echo "Inno Setup not found, trying alternative path"
+          Get-ChildItem "C:\Program Files*" -Recurse -Name "ISCC.exe" -ErrorAction SilentlyContinue
+        }
       shell: powershell
       
     - name: Build Installer
       run: |
-        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+        $isccPath = Get-ChildItem "C:\Program Files*" -Recurse -Name "ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($isccPath) {
+          $fullPath = Join-Path (Split-Path $isccPath -Parent) "ISCC.exe"
+          & $fullPath installer.iss
+        } else {
+          throw "ISCC.exe not found"
+        }
       shell: powershell
       
     - name: List installer files
       run: |
-        echo "Installer files:"
-        dir installer-output
+        echo "Checking installer output:"
+        if (Test-Path "installer-output") {
+          Get-ChildItem installer-output -Recurse
+        } else {
+          echo "installer-output directory not found"
+        }
+      shell: powershell
+        
+    - name: Create ZIP as fallback
+      run: |
+        cd publish
+        7z a ../DailyActivityApp-${{ github.ref_name }}.zip AdinersDailyActivityApp.exe
+        cd ../Assets
+        7z a ../DailyActivityApp-${{ github.ref_name }}.zip *
+        cd ..
+        echo "ZIP created as fallback"
+        
+    - name: Prepare release files
+      run: |
+        $files = @()
+        if (Test-Path "installer-output\*.exe") {
+          $files += Get-ChildItem "installer-output\*.exe" | ForEach-Object { $_.FullName }
+          echo "Installer found, will upload installer"
+        }
+        if (Test-Path "DailyActivityApp-*.zip") {
+          $files += Get-ChildItem "DailyActivityApp-*.zip" | ForEach-Object { $_.FullName }
+          echo "ZIP found, will upload ZIP"
+        }
+        $files -join "`n" | Out-File -FilePath "release-files.txt"
+        echo "Files to upload:"
+        Get-Content "release-files.txt"
       shell: powershell
         
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
-        files: installer-output/*.exe
+        files: |
+          installer-output/*.exe
+          DailyActivityApp-*.zip
         generate_release_notes: true
         draft: false
         prerelease: false
