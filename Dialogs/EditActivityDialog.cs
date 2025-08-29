@@ -12,12 +12,12 @@ namespace AdinersDailyActivityApp.Dialogs
         public string ActivityType { get; private set; } = "";
         public string ActivityText { get; private set; } = "";
 
-        private DateTimePicker dtpStartTime;
-        private DateTimePicker dtpEndTime;
-        private TextBox txtType;
-        private TextBox txtActivity;
-        private Button btnSave;
-        private Button btnCancel;
+        private DateTimePicker dtpStartTime = null!;
+        private DateTimePicker dtpEndTime = null!;
+        private TextBox txtType = null!;
+        private TextBox txtActivity = null!;
+        private Button btnSave = null!;
+        private Button btnCancel = null!;
 
         public EditActivityDialog(DateTime startTime, DateTime endTime, string type, string activity)
         {

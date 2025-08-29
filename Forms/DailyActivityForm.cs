@@ -510,13 +510,12 @@ namespace AdinersDailyActivityApp
             
             string info = $"Timer Status:\n" +
                          $"Current Time: {now:HH:mm:ss}\n" +
-                         $"Last Popup Time: {popupTime:HH:mm:ss}\n" +
-                         $"Minutes Since Last: {minutesSinceLastPopup}\n" +
+                         $"Next Popup Time: {(dontShowPopupToday ? "Disabled" : nextPopupTime.ToString("HH:mm:ss"))}\n" +
+                         $"Minutes Until Next: {(dontShowPopupToday ? "Disabled" : minutesUntilNext.ToString())}\n" +
                          $"Interval Setting: {config.IntervalHours} hours ({popupIntervalInMinutes} minutes)\n" +
                          $"Timer Running: {popupTimer.Enabled}\n" +
                          $"Don't Show Today: {dontShowPopupToday}\n" +
-                         $"Next Popup Time: {(dontShowPopupToday ? "Disabled" : nextPopupTime.ToString("HH:mm:ss"))}\n" +
-                         $"Minutes Until Next: {(dontShowPopupToday ? "Disabled" : minutesUntilNext.ToString())}";
+                         $"Last Popup: {popupTime:HH:mm:ss} ({minutesSinceLastPopup} min ago)";
             
             ShowDarkMessageBox(info, "Timer Debug Info");
         }
@@ -743,7 +742,9 @@ namespace AdinersDailyActivityApp
 
         private void OnEditHistoryClicked(object? sender, EventArgs e)
         {
-            if (lstActivityHistory.SelectedItem != null)
+            try
+            {
+                if (lstActivityHistory.SelectedItem != null)
             {
                 string selectedItem = lstActivityHistory.SelectedItem!.ToString();
                 int selectedIndex = lstActivityHistory.SelectedIndex;
@@ -816,22 +817,29 @@ namespace AdinersDailyActivityApp
                                         // Create original log entry to remove
                                         string originalLogEntry = $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {type} | {activity}";
                                         
-                                        // Open edit dialog
-                                        using (var editDialog = new EditActivityDialog(startTime, endTime, type, activity))
+                                        try
                                         {
-                                            if (editDialog.ShowDialog() == DialogResult.OK)
+                                            // Open edit dialog
+                                            using (var editDialog = new EditActivityDialog(startTime, endTime, type, activity))
                                             {
-                                                // Remove original entry
-                                                RemoveActivityFromLogFile(originalLogEntry);
-                                                
-                                                // Add new entry
-                                                string newLogEntry = $"[{editDialog.EndTime.ToString(CultureInfo.InvariantCulture)}] {editDialog.ActivityType} | {editDialog.ActivityText}";
-                                                string logFilePath = GetLogFilePath();
-                                                File.AppendAllText(logFilePath, newLogEntry + Environment.NewLine);
-                                                
-                                                // Refresh display
-                                                LoadLogHistory();
+                                                if (editDialog.ShowDialog() == DialogResult.OK)
+                                                {
+                                                    // Remove original entry
+                                                    RemoveActivityFromLogFile(originalLogEntry);
+                                                    
+                                                    // Add new entry
+                                                    string newLogEntry = $"[{editDialog.EndTime.ToString(CultureInfo.InvariantCulture)}] {editDialog.ActivityType} | {editDialog.ActivityText}";
+                                                    string logFilePath = GetLogFilePath();
+                                                    File.AppendAllText(logFilePath, newLogEntry + Environment.NewLine);
+                                                    
+                                                    // Refresh display
+                                                    LoadLogHistory();
+                                                }
                                             }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            ShowDarkMessageBox($"Error opening edit dialog: {ex.Message}", "Edit Error");
                                         }
                                     }
                                 }
@@ -839,6 +847,15 @@ namespace AdinersDailyActivityApp
                         }
                     }
                 }
+            }
+            else
+            {
+                ShowDarkMessageBox("Please select an activity item to edit.", "No Selection");
+            }
+            }
+            catch (Exception ex)
+            {
+                ShowDarkMessageBox($"Error in edit function: {ex.Message}\n\nStack trace: {ex.StackTrace}", "Edit Error");
             }
         }
 
