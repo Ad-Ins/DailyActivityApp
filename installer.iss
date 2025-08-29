@@ -36,13 +36,14 @@ Name: "{userdesktop}\Adiners Daily Activity"; Filename: "{app}\AdinersDailyActiv
 Filename: "{app}\AdinersDailyActivityApp.exe"; Description: "Launch Adiners Daily Activity"; Flags: nowait postinstall skipifsilent
 
 [Registry]
+; Force auto-start with 1 minute delay for Windows startup
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
-    ValueType: string; ValueName: "AdinersDailyActivity"; ValueData: """{app}\AdinersDailyActivityApp.exe"""; \
-    Flags: uninsdeletevalue; Tasks: autostart
+    ValueType: string; ValueName: "AdinersDailyActivity"; \
+    ValueData: "cmd /c timeout /t 60 /nobreak >nul && ""{app}\AdinersDailyActivityApp.exe""""; \
+    Flags: uninsdeletevalue
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional icons:"; Flags: checkedonce
-Name: "autostart"; Description: "Start with &Windows"; GroupDescription: "Startup options:"; Flags: checkedonce
 
 [UninstallDelete]
 Type: files; Name: "{app}\config.json"

@@ -136,7 +136,17 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Changelog
 
-### v2.0.4 (Latest)
+### v2.0.7 (Latest)
+- **Force Auto-Start**: Installer now automatically adds app to Windows startup (no user choice required)
+- **Startup Delay**: Added 1-minute delay after Windows boot to ensure stable startup
+- **Improved Installation**: Enhanced installer experience with automatic startup configuration
+
+### v2.0.6
+- **F2/F3 Key Accessibility Fix**: Fixed issue where F2/F3 keys couldn't be accessed when fullscreen overlay was visible
+- **Auto-Selection**: F2/F3 keys now auto-select first activity if none is selected for easier access
+- **Enhanced Key Handling**: Form-level key handlers ensure edit and delete functions work from anywhere
+
+### v2.0.4
 - **Delete Activity Feature**: F3 key and right-click menu to delete incorrect activities with confirmation
 - **Streamlined Update Dialog**: Removed "Open GitHub" button for cleaner update experience
 - **Enhanced Activity Management**: Complete edit and delete functionality for activity history
