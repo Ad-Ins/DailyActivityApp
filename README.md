@@ -136,7 +136,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Changelog
 
-### v2.0.7 (Latest)
+### v2.0.8 (Latest)
+- **Exclude Times Fix**: Fixed TimeSpan serialization issue causing exclude times to show as 00:00-00:00
+- **Default Lunch Break**: Properly saves and loads default lunch break as 12:00-13:00
+- **JSON Serialization**: Improved exclude times storage with custom TimeSpan handling
+
+### v2.0.7
 - **Force Auto-Start**: Installer now automatically adds app to Windows startup (no user choice required)
 - **Startup Delay**: Added 1-minute delay after Windows boot to ensure stable startup
 - **Improved Installation**: Enhanced installer experience with automatic startup configuration
