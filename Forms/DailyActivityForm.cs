@@ -389,6 +389,16 @@ namespace AdinersDailyActivityApp
                 e.Handled = true;
                 e.SuppressKeyPress = true;
             }
+            if (e.KeyCode == Keys.F2)
+            {
+                OnEditHistoryClicked(sender, e);
+                e.Handled = true;
+            }
+            if (e.KeyCode == Keys.F3)
+            {
+                OnDeleteHistoryClicked(sender, e);
+                e.Handled = true;
+            }
         }
 
         private void LstActivityHistory_DrawItem(object? sender, DrawItemEventArgs e)
@@ -788,10 +798,25 @@ namespace AdinersDailyActivityApp
 
         private void OnEditHistoryClicked(object? sender, EventArgs e)
         {
+            // If no selection, try to use the first sub-item (activity) in the list
             if (lstActivityHistory.SelectedItem == null)
             {
-                ShowDarkMessageBox("Please select an activity item to edit.", "No Selection");
-                return;
+                // Find first sub-item (activity) in the list
+                for (int i = 0; i < lstActivityHistory.Items.Count; i++)
+                {
+                    string item = lstActivityHistory.Items[i].ToString();
+                    if (item.StartsWith("     ")) // This is a sub-item (activity)
+                    {
+                        lstActivityHistory.SelectedIndex = i;
+                        break;
+                    }
+                }
+                
+                if (lstActivityHistory.SelectedItem == null)
+                {
+                    ShowDarkMessageBox("No activities found to edit.", "No Activities");
+                    return;
+                }
             }
 
             string selectedItem = lstActivityHistory.SelectedItem.ToString();
@@ -878,10 +903,25 @@ namespace AdinersDailyActivityApp
         
         private void OnDeleteHistoryClicked(object? sender, EventArgs e)
         {
+            // If no selection, try to use the first sub-item (activity) in the list
             if (lstActivityHistory.SelectedItem == null)
             {
-                ShowDarkMessageBox("Please select an activity item to delete.", "No Selection");
-                return;
+                // Find first sub-item (activity) in the list
+                for (int i = 0; i < lstActivityHistory.Items.Count; i++)
+                {
+                    string item = lstActivityHistory.Items[i].ToString();
+                    if (item.StartsWith("     ")) // This is a sub-item (activity)
+                    {
+                        lstActivityHistory.SelectedIndex = i;
+                        break;
+                    }
+                }
+                
+                if (lstActivityHistory.SelectedItem == null)
+                {
+                    ShowDarkMessageBox("No activities found to delete.", "No Activities");
+                    return;
+                }
             }
 
             string selectedItem = lstActivityHistory.SelectedItem.ToString();
