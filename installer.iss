@@ -2,6 +2,10 @@
 [Setup]
 AppName=Adiners Daily Activity
 AppVersion={#GetVersionNumbersString("publish\AdinersDailyActivityApp.exe")}
+AppPublisher=PT Adicipta Invosi Teknologi
+AppPublisherURL=https://github.com/Ad-Ins/DailyActivityApp
+AppSupportURL=https://github.com/Ad-Ins/DailyActivityApp/issues
+AppUpdatesURL=https://github.com/Ad-Ins/DailyActivityApp/releases
 DefaultDirName={autopf}\AdinersDailyActivity
 DefaultGroupName=Adiners Daily Activity
 OutputDir=installer-output
