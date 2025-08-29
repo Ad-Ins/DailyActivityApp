@@ -54,18 +54,20 @@ namespace AdinersDailyActivityApp
         private TextBox txtActivity = null!;
         private ListBox lstActivityHistory = null!;
         private PictureBox logoPictureBox = null!;
-        private System.Windows.Forms.Timer popupTimer = null!;
+        private System.Windows.Forms.Timer displayTimer = null!;
         private NotifyIcon trayIcon = null!;
         private ContextMenuStrip trayMenu = null!;
         private ContextMenuStrip historyContextMenu = null!;
-        private DateTime appStartTime;
-        private DateTime popupTime;
-        private int popupIntervalInMinutes;
         private AppConfig config = null!;
-        private bool isLunchPopupShown = false;
-        private bool isLunchHandled = false;
-        private DateTime lastActivityInputTime = DateTime.MinValue;
-        private bool dontShowPopupToday = false;
+        
+        // Clockify-style timer fields
+        private Button btnStartStop = null!;
+        private bool isTimerRunning = false;
+        private DateTime timerStartTime;
+        private string currentActivityType = "";
+        private string currentActivityDescription = "";
+        private TimeSpan elapsedTime = TimeSpan.Zero;
+        
         private const string TypeHint = "Enter type...";
         private const string ActivityHint = "Enter activity...";
         #endregion
@@ -73,12 +75,10 @@ namespace AdinersDailyActivityApp
         #region Constructor
         public DailyActivityForm(DateTime appStartTime, DateTime popupTime)
         {
-            this.appStartTime = appStartTime;
-            this.popupTime = popupTime;
             InitializeComponent();
             SetupForm();
             LoadConfig();
-            StartTimer();
+            StartDisplayTimer();
             LoadLogHistory();
             SystemEvents.SessionEnding += SystemEvents_SessionEnding;
             
@@ -91,22 +91,6 @@ namespace AdinersDailyActivityApp
         private void LoadConfig()
         {
             config = AppConfig.Load();
-            // Default to 2 hours if not set
-            if (config.IntervalHours <= 0) 
-            {
-                config.IntervalHours = 2;
-                config.Save();
-            }
-            popupIntervalInMinutes = config.IntervalHours * 60;
-            
-            // Check if don't show setting should reset (new day)
-            if (config.LastDontShowDate.Date != DateTime.Now.Date)
-            {
-                config.DontShowPopupToday = false;
-                config.LastDontShowDate = DateTime.Now.Date;
-                config.Save();
-            }
-            dontShowPopupToday = config.DontShowPopupToday;
         }
 
         private void InitializeComponent()
@@ -116,7 +100,8 @@ namespace AdinersDailyActivityApp
             txtActivity = new TextBox();
             lstActivityHistory = new ListBox();
             logoPictureBox = new PictureBox();
-            popupTimer = new System.Windows.Forms.Timer();
+            displayTimer = new System.Windows.Forms.Timer();
+            btnStartStop = new Button();
             // Tray menu
             trayMenu = new ContextMenuStrip();
             trayMenu.BackColor = Color.FromArgb(30, 30, 30);
@@ -154,7 +139,7 @@ namespace AdinersDailyActivityApp
             historyContextMenu = new ContextMenuStrip();
             historyContextMenu.BackColor = Color.FromArgb(30, 30, 30);
             historyContextMenu.ForeColor = Color.White;
-            // historyContextMenu.Items.Add("Edit", null, OnEditHistoryClicked); // Temporarily disabled
+            historyContextMenu.Items.Add("Edit", null, OnEditHistoryClicked); // Re-enabled for on-the-fly editing
             lstActivityHistory.ContextMenuStrip = historyContextMenu;
         }
 
@@ -196,11 +181,11 @@ namespace AdinersDailyActivityApp
             lblTitle.Dock = DockStyle.Fill;
             mainLayout.Controls.Add(lblTitle, 0, 1);
 
-            // Input row: TableLayout for type + activity full width
+            // Input row: TableLayout for type + activity + button
             var inputPanel = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 2,
+                ColumnCount = 3,
                 RowCount = 1,
                 BackColor = Color.FromArgb(20, 20, 20),
                 Padding = new Padding(0),
@@ -208,6 +193,7 @@ namespace AdinersDailyActivityApp
             };
             inputPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220)); // Fixed for cmbType
             inputPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F)); // Full for txtActivity
+            inputPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120)); // Fixed for button
             inputPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 50)); // Fixed height 50px
 
             // Modern ComboBox styling
@@ -317,6 +303,18 @@ namespace AdinersDailyActivityApp
             
             activityPanel.Controls.Add(txtActivity);
             inputPanel.Controls.Add(activityPanel, 1, 0);
+            
+            // START/STOP Button
+            btnStartStop.Text = "START";
+            btnStartStop.Font = new Font("Segoe UI", 12, FontStyle.Bold);
+            btnStartStop.BackColor = Color.FromArgb(0, 120, 215); // Blue for START
+            btnStartStop.ForeColor = Color.White;
+            btnStartStop.FlatStyle = FlatStyle.Flat;
+            btnStartStop.FlatAppearance.BorderSize = 0;
+            btnStartStop.Dock = DockStyle.Fill;
+            btnStartStop.Margin = new Padding(5, 5, 10, 5);
+            btnStartStop.Click += OnStartStopClicked;
+            inputPanel.Controls.Add(btnStartStop, 2, 0);
 
             mainLayout.Controls.Add(inputPanel, 0, 2);
 
@@ -859,50 +857,15 @@ namespace AdinersDailyActivityApp
             }
         }
 
-        private void popupTimer_Tick(object? sender, EventArgs e)
-        {
-            DateTime now = DateTime.Now;
-            
-            // Check if don't show setting should reset (new day)
-            if (config.LastDontShowDate.Date != now.Date)
-            {
-                config.DontShowPopupToday = false;
-                config.LastDontShowDate = now.Date;
-                config.Save();
-                dontShowPopupToday = false;
-                
-                // Update tray menu checkbox
-                var dontShowMenuItem = trayMenu.Items.Cast<ToolStripItem>().FirstOrDefault(x => x.Text == "Don't show popup today") as ToolStripMenuItem;
-                if (dontShowMenuItem != null)
-                    dontShowMenuItem.Checked = false;
-            }
-            
-            // Don't show popups if user disabled them for today
-            if (dontShowPopupToday) return;
-            
-            // Show popups 24/7 now (removed working hours restriction)
-            // Lunch popup logic
-            if (!isLunchPopupShown && now.Hour == 12 && now.Minute >= 0 && now.Minute <= 15)
-            {
-                ShowLunchPopup();
-                isLunchPopupShown = true;
-                isLunchHandled = false;
-            }
-            
-            // Activity reminder logic
-            TimeSpan timeSinceLastPopup = now - popupTime;
-            if (timeSinceLastPopup.TotalMinutes >= popupIntervalInMinutes)
-            {
-                ShowFullScreenInput();
-                popupTime = DateTime.Now;
-            }
-            
-            // Reset lunch popup for next day
-            if (now.Hour > 13)
-                isLunchPopupShown = false;
-        }
 
-        private void SystemEvents_SessionEnding(object? sender, SessionEndingEventArgs e) => SaveActivity();
+
+        private void SystemEvents_SessionEnding(object? sender, SessionEndingEventArgs e)
+        {
+            if (isTimerRunning)
+            {
+                StopTimer();
+            }
+        }
         #endregion
 
         #region Methods
@@ -972,28 +935,91 @@ namespace AdinersDailyActivityApp
 
         private void SaveActivity()
         {
+            // Enter key starts timer like Clockify
+            if (!isTimerRunning)
+            {
+                StartTimer();
+            }
+        }
+        
+        private void OnStartStopClicked(object? sender, EventArgs e)
+        {
+            if (isTimerRunning)
+            {
+                StopTimer();
+            }
+            else
+            {
+                StartTimer();
+            }
+        }
+        
+        private void StartTimer()
+        {
             string type = cmbType.Text.Trim();
             string activity = txtActivity.Text.Trim();
             
             if (type == TypeHint) type = "";
             if (activity == ActivityHint) activity = "";
             
-            if (!string.IsNullOrEmpty(activity))
+            if (string.IsNullOrEmpty(activity))
             {
-                // Add new type to dropdown if not exists
-                if (!string.IsNullOrEmpty(type) && !cmbType.Items.Contains(type))
-                {
-                    cmbType.Items.Add(type);
-                }
-                
-                string typePart = string.IsNullOrEmpty(type) ? "" : $"{type} | ";
-                string logEntry = $"[{DateTime.Now.ToString(CultureInfo.InvariantCulture)}] {typePart}{activity}";
-                string logFilePath = GetLogFilePath();
-                File.AppendAllText(logFilePath, logEntry + Environment.NewLine);
-                LoadLogHistory();
-                lastActivityInputTime = DateTime.Now;
+                ShowDarkMessageBox("Please enter an activity description to start the timer.", "Activity Required");
+                return;
             }
+            
+            currentActivityType = type;
+            currentActivityDescription = activity;
+            timerStartTime = DateTime.Now;
+            isTimerRunning = true;
+            elapsedTime = TimeSpan.Zero;
+            
+            // Update button appearance
+            btnStartStop.Text = "STOP";
+            btnStartStop.BackColor = Color.FromArgb(220, 53, 69); // Red for STOP
+            
+            UpdateTrayIcon();
+            trayIcon.ShowBalloonTip(2000, "Timer Started", $"Timer started for: {activity}", ToolTipIcon.Info);
             this.Hide();
+        }
+        
+        private void StopTimer()
+        {
+            if (!isTimerRunning) return;
+            
+            DateTime endTime = DateTime.Now;
+            elapsedTime = endTime - timerStartTime;
+            
+            // Save to log
+            string typePart = string.IsNullOrEmpty(currentActivityType) ? "" : $"{currentActivityType} | ";
+            string logEntry = $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {typePart}{currentActivityDescription}";
+            string logFilePath = GetLogFilePath();
+            File.AppendAllText(logFilePath, logEntry + Environment.NewLine);
+            
+            int totalMinutes = (int)(endTime - timerStartTime).TotalMinutes;
+            string activityDesc = currentActivityDescription;
+            
+            // Reset timer state
+            isTimerRunning = false;
+            currentActivityType = "";
+            currentActivityDescription = "";
+            elapsedTime = TimeSpan.Zero;
+            
+            // Update button appearance
+            btnStartStop.Text = "START";
+            btnStartStop.BackColor = Color.FromArgb(0, 120, 215); // Blue for START
+            
+            // Reset form
+            cmbType.Text = TypeHint;
+            cmbType.ForeColor = Color.FromArgb(180, 180, 180);
+            txtActivity.Text = ActivityHint;
+            txtActivity.ForeColor = Color.FromArgb(180, 180, 180);
+            
+            LoadLogHistory();
+            UpdateTrayIcon();
+            
+            trayIcon.ShowBalloonTip(3000, "Timer Stopped", 
+                $"Activity logged: {totalMinutes} minutes\n{activityDesc}", ToolTipIcon.Info);
         }
 
         private void LoadLogHistory()
@@ -1327,19 +1353,46 @@ namespace AdinersDailyActivityApp
             return Path.Combine(appDataDir, "activity_log.txt");
         }
 
-        private void StartTimer()
+        private void StartDisplayTimer()
         {
-            popupTimer.Stop();
-            // Timer runs 24/7, checking every minute
-            popupTimer.Interval = 60 * 1000; // 1 minute
-            popupTimer.Tick -= popupTimer_Tick;
-            popupTimer.Tick += popupTimer_Tick;
-            popupTimer.Start();
+            displayTimer.Stop();
+            displayTimer.Interval = 1000; // 1 second for real-time updates
+            displayTimer.Tick -= DisplayTimer_Tick;
+            displayTimer.Tick += DisplayTimer_Tick;
+            displayTimer.Start();
             
-            // Show current interval setting
-            string status = dontShowPopupToday ? "(disabled today)" : "";
-            trayIcon.ShowBalloonTip(3000, "Timer Started", 
-                $"24/7 timer active - Reminders every {config.IntervalHours} hours {status}", ToolTipIcon.Info);
+            UpdateTrayIcon();
+        }
+        
+        private void DisplayTimer_Tick(object? sender, EventArgs e)
+        {
+            UpdateTrayIcon();
+        }
+        
+        private void UpdateTrayIcon()
+        {
+            if (isTimerRunning)
+            {
+                elapsedTime = DateTime.Now - timerStartTime;
+                string timeStr = $"{(int)elapsedTime.TotalHours:D2}:{elapsedTime.Minutes:D2}:{elapsedTime.Seconds:D2}";
+                trayIcon.Text = $"Timer: {timeStr} - {currentActivityDescription}";
+                
+                // Update title if form is visible
+                if (lblTitle != null)
+                {
+                    lblTitle.Text = $"Timer Running: {timeStr} - {currentActivityDescription}";
+                }
+            }
+            else
+            {
+                trayIcon.Text = "Adiners - Daily Activity";
+                
+                // Update title if form is visible
+                if (lblTitle != null)
+                {
+                    lblTitle.Text = "What are you working on?";
+                }
+            }
         }
 
         private void LoadLogoImage()
