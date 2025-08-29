@@ -134,6 +134,8 @@ namespace AdinersDailyActivityApp
             trayMenu.Items.Add("-");
             trayMenu.Items.Add("Check for Updates", null, OnCheckUpdatesClicked);
             trayMenu.Items.Add("Clear History", null, OnClearHistoryClicked);
+            trayMenu.Items.Add("-");
+            trayMenu.Items.Add("About", null, OnAboutClicked);
             trayMenu.Items.Add("Exit", null, OnExitClicked);
 
             string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "logo.ico");
@@ -502,15 +504,19 @@ namespace AdinersDailyActivityApp
         {
             DateTime now = DateTime.Now;
             TimeSpan timeSinceLastPopup = now - popupTime;
+            int minutesSinceLastPopup = (int)timeSinceLastPopup.TotalMinutes;
+            int minutesUntilNext = Math.Max(0, popupIntervalInMinutes - minutesSinceLastPopup);
+            DateTime nextPopupTime = popupTime.AddMinutes(popupIntervalInMinutes);
             
             string info = $"Timer Status:\n" +
                          $"Current Time: {now:HH:mm:ss}\n" +
-                         $"Last Popup: {popupTime:HH:mm:ss}\n" +
-                         $"Time Since Last: {(int)timeSinceLastPopup.TotalMinutes} minutes\n" +
+                         $"Last Popup Time: {popupTime:HH:mm:ss}\n" +
+                         $"Minutes Since Last: {minutesSinceLastPopup}\n" +
                          $"Interval Setting: {config.IntervalHours} hours ({popupIntervalInMinutes} minutes)\n" +
                          $"Timer Running: {popupTimer.Enabled}\n" +
                          $"Don't Show Today: {dontShowPopupToday}\n" +
-                         $"Next Popup In: {(dontShowPopupToday ? "Disabled" : Math.Max(0, popupIntervalInMinutes - (int)timeSinceLastPopup.TotalMinutes).ToString() + " minutes")}";
+                         $"Next Popup Time: {(dontShowPopupToday ? "Disabled" : nextPopupTime.ToString("HH:mm:ss"))}\n" +
+                         $"Minutes Until Next: {(dontShowPopupToday ? "Disabled" : minutesUntilNext.ToString())}";
             
             ShowDarkMessageBox(info, "Timer Debug Info");
         }
@@ -548,7 +554,7 @@ namespace AdinersDailyActivityApp
                 }
                 else
                 {
-                    this.Invoke(() => ShowDarkMessageBox($"You are using the latest version ({UpdateService.CurrentVersion})", "No Updates Available"));
+                    this.Invoke(() => ShowNoUpdateDialog());
                 }
             });
         }
@@ -578,6 +584,161 @@ namespace AdinersDailyActivityApp
         {
             var updateDialog = new UpdateDialog(release);
             updateDialog.Show(); // Non-blocking
+        }
+        
+        private void ShowNoUpdateDialog()
+        {
+            Form noUpdateForm = new Form
+            {
+                Width = 400,
+                Height = 180,
+                Text = "No Updates Available",
+                StartPosition = FormStartPosition.CenterScreen,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false,
+                MinimizeBox = false,
+                BackColor = Color.FromArgb(30, 30, 30),
+                ForeColor = Color.White,
+                TopMost = false
+            };
+            
+            Label messageLabel = new Label
+            {
+                Text = $"You are using the latest version ({UpdateService.CurrentVersion})",
+                Location = new Point(20, 20),
+                Size = new Size(340, 60),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10)
+            };
+            
+            Button btnOpenGitHub = new Button
+            {
+                Text = "Open GitHub",
+                Size = new Size(100, 30),
+                Location = new Point(20, 110),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(50, 50, 50),
+                ForeColor = Color.White
+            };
+            btnOpenGitHub.FlatAppearance.BorderSize = 0;
+            btnOpenGitHub.Click += (s, e) => { UpdateService.OpenDownloadPage(); noUpdateForm.Close(); };
+            
+            Button btnOK = new Button
+            {
+                Text = "OK",
+                Size = new Size(80, 30),
+                Location = new Point(290, 110),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(50, 50, 50),
+                ForeColor = Color.White,
+                DialogResult = DialogResult.OK
+            };
+            btnOK.FlatAppearance.BorderSize = 0;
+            
+            noUpdateForm.Controls.AddRange(new Control[] { messageLabel, btnOpenGitHub, btnOK });
+            noUpdateForm.Show();
+        }
+        
+        private void OnAboutClicked(object? sender, EventArgs e)
+        {
+            Form aboutForm = new Form
+            {
+                Width = 480,
+                Height = 320,
+                Text = "About Daily Activity App",
+                StartPosition = FormStartPosition.CenterScreen,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false,
+                MinimizeBox = false,
+                BackColor = Color.FromArgb(30, 30, 30),
+                ForeColor = Color.White
+            };
+            
+            Label titleLabel = new Label
+            {
+                Text = "Daily Activity Tracker",
+                Location = new Point(20, 20),
+                Size = new Size(420, 30),
+                ForeColor = Color.FromArgb(100, 200, 255),
+                Font = new Font("Segoe UI", 16, FontStyle.Bold)
+            };
+            
+            Label versionLabel = new Label
+            {
+                Text = $"Version {UpdateService.CurrentVersion}",
+                Location = new Point(20, 55),
+                Size = new Size(420, 20),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10)
+            };
+            
+            Label descriptionLabel = new Label
+            {
+                Text = "A comprehensive activity tracking application designed to help\n" +
+                       "professionals monitor and manage their daily work activities.\n\n" +
+                       "Never miss tracking your activities again! This tool provides\n" +
+                       "automatic reminders, detailed logging, and comprehensive\n" +
+                       "reporting to ensure all your work is properly documented.",
+                Location = new Point(20, 85),
+                Size = new Size(420, 120),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10)
+            };
+            
+            Label featuresLabel = new Label
+            {
+                Text = "Key Features:\n" +
+                       "• 24/7 automatic activity reminders\n" +
+                       "• Smart activity type management\n" +
+                       "• Excel export with detailed reports\n" +
+                       "• Overtime tracking and analysis\n" +
+                       "• Auto-update system",
+                Location = new Point(20, 210),
+                Size = new Size(200, 120),
+                ForeColor = Color.FromArgb(200, 200, 200),
+                Font = new Font("Segoe UI", 9)
+            };
+            
+            Label copyrightLabel = new Label
+            {
+                Text = "© 2024 PT Adicipta Invosi Teknologi\nDeveloped by LJP",
+                Location = new Point(240, 230),
+                Size = new Size(200, 40),
+                ForeColor = Color.FromArgb(150, 150, 150),
+                Font = new Font("Segoe UI", 9),
+                TextAlign = ContentAlignment.TopRight
+            };
+            
+            Button btnGitHub = new Button
+            {
+                Text = "GitHub Repository",
+                Size = new Size(130, 30),
+                Location = new Point(240, 280),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(50, 50, 50),
+                ForeColor = Color.White
+            };
+            btnGitHub.FlatAppearance.BorderSize = 0;
+            btnGitHub.Click += (s, e) => { UpdateService.OpenDownloadPage(); };
+            
+            Button btnClose = new Button
+            {
+                Text = "Close",
+                Size = new Size(80, 30),
+                Location = new Point(380, 280),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(50, 50, 50),
+                ForeColor = Color.White,
+                DialogResult = DialogResult.OK
+            };
+            btnClose.FlatAppearance.BorderSize = 0;
+            
+            aboutForm.Controls.AddRange(new Control[] { 
+                titleLabel, versionLabel, descriptionLabel, featuresLabel, 
+                copyrightLabel, btnGitHub, btnClose 
+            });
+            
+            aboutForm.ShowDialog();
         }
 
         private void OnEditHistoryClicked(object? sender, EventArgs e)
