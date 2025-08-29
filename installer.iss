@@ -11,12 +11,16 @@ Compression=lzma
 SolidCompression=yes
 DisableProgramGroupPage=no
 UninstallDisplayIcon={app}\AdinersDailyActivityApp.exe
-PrivilegesRequired=admin
+PrivilegesRequired=lowest
 
 
 [Files]
-; File exe utama (single file)
+; File exe utama
 Source: "publish\AdinersDailyActivityApp.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Semua DLL files
+Source: "publish\*.dll"; DestDir: "{app}"; Flags: ignoreversion
+; Runtime files
+Source: "publish\*.json"; DestDir: "{app}"; Flags: ignoreversion
 ; Folder Assets
 Source: "Assets\*"; DestDir: "{app}\Assets"; Flags: ignoreversion recursesubdirs createallsubdirs
 

@@ -13,7 +13,6 @@
     <Product>Daily Activity App</Product>
     <Company>Adiners</Company>
     <Copyright>Copyright © Adiners 2024</Copyright>
-    <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
