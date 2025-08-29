@@ -657,7 +657,7 @@ namespace AdinersDailyActivityApp
             Form noUpdateForm = new Form
             {
                 Width = 400,
-                Height = 180,
+                Height = 120,
                 Text = "No Updates Available",
                 StartPosition = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedDialog,
@@ -674,22 +674,21 @@ namespace AdinersDailyActivityApp
                 Location = new Point(20, 20),
                 Size = new Size(340, 60),
                 ForeColor = Color.White,
-                Font = new Font("Segoe UI", 10)
+                Font = new Font("Segoe UI", 10),
+                TextAlign = ContentAlignment.MiddleCenter
             };
             
-            Button btnOK = new Button
-            {
-                Text = "OK",
-                Size = new Size(80, 30),
-                Location = new Point(290, 110),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(50, 50, 50),
-                ForeColor = Color.White,
-                DialogResult = DialogResult.OK
-            };
-            btnOK.FlatAppearance.BorderSize = 0;
+            noUpdateForm.Controls.Add(messageLabel);
             
-            noUpdateForm.Controls.AddRange(new Control[] { messageLabel, btnOK });
+            // Auto-close after 3 seconds
+            var autoCloseTimer = new System.Windows.Forms.Timer();
+            autoCloseTimer.Interval = 3000;
+            autoCloseTimer.Tick += (s, e) => {
+                autoCloseTimer.Stop();
+                noUpdateForm.Close();
+            };
+            autoCloseTimer.Start();
+            
             noUpdateForm.Show();
         }
         
