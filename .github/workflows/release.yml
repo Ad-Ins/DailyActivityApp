@@ -24,7 +24,7 @@ jobs:
       run: dotnet build --configuration Release --no-restore
       
     - name: Publish Self-Contained
-      run: dotnet publish --configuration Release --runtime win-x64 --self-contained true --output ./publish
+      run: dotnet publish AdinersDailyActivityApp.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish
       
     - name: Setup Inno Setup
       run: |
@@ -42,12 +42,24 @@ jobs:
       
     - name: Build Installer
       run: |
-        $isccPath = Get-ChildItem "C:\Program Files*" -Recurse -Name "ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+        $isccPaths = @(
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+          "C:\Program Files\Inno Setup 6\ISCC.exe",
+          "C:\tools\InnoSetup\ISCC.exe"
+        )
+        $isccPath = $isccPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
         if ($isccPath) {
-          $fullPath = Join-Path (Split-Path $isccPath -Parent) "ISCC.exe"
-          & $fullPath installer.iss
+          echo "Using ISCC at: $isccPath"
+          & $isccPath installer.iss
         } else {
-          throw "ISCC.exe not found"
+          echo "Searching for ISCC.exe..."
+          $found = Get-ChildItem "C:\" -Recurse -Name "ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($found) {
+            echo "Found ISCC at: $found"
+            & $found installer.iss
+          } else {
+            throw "ISCC.exe not found anywhere"
+          }
         }
       shell: powershell
       
