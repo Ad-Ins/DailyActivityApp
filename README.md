@@ -136,7 +136,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Changelog
 
-### v2.0.8 (Latest)
+### v3.0.0 (Latest)
 - **Exclude Times Fix**: Fixed TimeSpan serialization issue causing exclude times to show as 00:00-00:00
 - **Default Lunch Break**: Properly saves and loads default lunch break as 12:00-13:00
 - **JSON Serialization**: Improved exclude times storage with custom TimeSpan handling
@@ -209,4 +209,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Auto-update system
 - 24/7 popup reminders
 - Overtime detection
+
 
