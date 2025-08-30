@@ -1868,7 +1868,8 @@ namespace AdinersDailyActivityApp
                 MaximizeBox = false,
                 MinimizeBox = false,
                 BackColor = Color.FromArgb(30, 30, 30),
-                ForeColor = Color.White
+                ForeColor = Color.White,
+                TopMost = true
             };
             
             Label messageLabel = new Label
