@@ -595,7 +595,81 @@ namespace AdinersDailyActivityApp
                          $"Don't Show Today: {dontShowPopupToday}\n" +
                          $"Last Popup: {popupTime:HH:mm:ss} ({minutesSinceLastPopup} min ago)";
             
-            ShowDarkMessageBox(info, "Timer Debug Info");
+            ShowTimerInfoDialog(info);
+        }
+        
+        private void ShowTimerInfoDialog(string info)
+        {
+            Form timerForm = new Form
+            {
+                Width = 450,
+                Height = 280,
+                Text = "Timer Information",
+                StartPosition = FormStartPosition.CenterScreen,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false,
+                MinimizeBox = false,
+                BackColor = Color.FromArgb(30, 30, 30),
+                ForeColor = Color.White,
+                TopMost = true
+            };
+            
+            Label infoLabel = new Label
+            {
+                Text = info,
+                AutoSize = false,
+                Size = new Size(410, 180),
+                Location = new Point(20, 20),
+                TextAlign = ContentAlignment.TopLeft,
+                ForeColor = Color.White,
+                Font = new Font("Consolas", 10)
+            };
+            
+            Button refreshButton = new Button
+            {
+                Text = "Refresh",
+                Size = new Size(80, 30),
+                Location = new Point(180, 210),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(0, 120, 215),
+                ForeColor = Color.White
+            };
+            refreshButton.FlatAppearance.BorderSize = 0;
+            refreshButton.Click += (s, e) => {
+                DateTime now = DateTime.Now;
+                TimeSpan timeSinceLastPopup = now - popupTime;
+                int minutesSinceLastPopup = (int)timeSinceLastPopup.TotalMinutes;
+                int minutesUntilNext = Math.Max(0, popupIntervalInMinutes - minutesSinceLastPopup);
+                DateTime nextPopupTime = popupTime.AddMinutes(popupIntervalInMinutes);
+                
+                string updatedInfo = $"Timer Status:\n" +
+                                   $"Current Time: {now:HH:mm:ss}\n" +
+                                   $"Next Popup Time: {(dontShowPopupToday ? "Disabled" : nextPopupTime.ToString("HH:mm:ss"))}\n" +
+                                   $"Minutes Until Next: {(dontShowPopupToday ? "Disabled" : minutesUntilNext.ToString())}\n" +
+                                   $"Interval Setting: {config.IntervalHours} hours ({popupIntervalInMinutes} minutes)\n" +
+                                   $"Timer Running: {popupTimer.Enabled}\n" +
+                                   $"Don't Show Today: {dontShowPopupToday}\n" +
+                                   $"Last Popup: {popupTime:HH:mm:ss} ({minutesSinceLastPopup} min ago)";
+                infoLabel.Text = updatedInfo;
+            };
+            
+            Button closeButton = new Button
+            {
+                Text = "Close",
+                DialogResult = DialogResult.OK,
+                Size = new Size(80, 30),
+                Location = new Point(270, 210),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(50, 50, 50),
+                ForeColor = Color.White
+            };
+            closeButton.FlatAppearance.BorderSize = 0;
+            
+            timerForm.Controls.Add(infoLabel);
+            timerForm.Controls.Add(refreshButton);
+            timerForm.Controls.Add(closeButton);
+            
+            timerForm.ShowDialog();
         }
         
         private void OnDontShowTodayClicked(object? sender, EventArgs e)
