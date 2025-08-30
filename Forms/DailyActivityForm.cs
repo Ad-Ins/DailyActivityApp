@@ -1281,8 +1281,79 @@ namespace AdinersDailyActivityApp
             if (File.Exists(logFilePath))
             {
                 string[] lines = File.ReadAllLines(logFilePath);
-                var filteredLines = lines.Where(line => !line.Trim().Equals(logEntryToRemove.Trim(), StringComparison.Ordinal));
+                var filteredLines = new List<string>();
+                bool entryRemoved = false;
+                
+                // Extract components from the entry we want to remove
+                var targetComponents = ParseLogEntry(logEntryToRemove);
+                if (targetComponents == null)
+                {
+                    ShowDarkMessageBox("Could not parse log entry to remove.", "Delete Error");
+                    return;
+                }
+                
+                foreach (string line in lines)
+                {
+                    var lineComponents = ParseLogEntry(line);
+                    
+                    // If we can't parse the line, keep it
+                    if (lineComponents == null)
+                    {
+                        filteredLines.Add(line);
+                        continue;
+                    }
+                    
+                    // Compare components instead of exact string match
+                    bool isMatch = lineComponents.Value.type.Equals(targetComponents.Value.type, StringComparison.OrdinalIgnoreCase) &&
+                                  lineComponents.Value.activity.Equals(targetComponents.Value.activity, StringComparison.OrdinalIgnoreCase) &&
+                                  Math.Abs((lineComponents.Value.timestamp - targetComponents.Value.timestamp).TotalMinutes) < 1; // Within 1 minute
+                    
+                    if (isMatch && !entryRemoved)
+                    {
+                        entryRemoved = true; // Skip this line (remove it)
+                    }
+                    else
+                    {
+                        filteredLines.Add(line);
+                    }
+                }
+                
                 File.WriteAllLines(logFilePath, filteredLines);
+                
+                if (!entryRemoved)
+                {
+                    ShowDarkMessageBox("Activity not found in log file. It may have already been deleted.", "Delete Warning");
+                }
+            }
+        }
+        
+        private (DateTime timestamp, string type, string activity)? ParseLogEntry(string logEntry)
+        {
+            try
+            {
+                int timestampEndIndex = logEntry.IndexOf(']');
+                if (timestampEndIndex <= 0) return null;
+                
+                string timestampStr = logEntry.Substring(1, timestampEndIndex - 1);
+                if (!DateTime.TryParse(timestampStr, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime timestamp))
+                    return null;
+                
+                string rest = logEntry.Substring(timestampEndIndex + 2).Trim();
+                string type = "";
+                string activity = rest;
+                
+                int pipeIndex = rest.IndexOf('|');
+                if (pipeIndex > 0)
+                {
+                    type = rest.Substring(0, pipeIndex).Trim();
+                    activity = rest.Substring(pipeIndex + 1).Trim();
+                }
+                
+                return (timestamp, type, activity);
+            }
+            catch
+            {
+                return null;
             }
         }
 
