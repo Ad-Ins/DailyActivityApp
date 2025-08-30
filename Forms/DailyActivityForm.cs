@@ -877,8 +877,10 @@ namespace AdinersDailyActivityApp
                 !DateTime.TryParseExact($"{dateStr} {endStr}", "dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime endTime))
                 return;
 
-            // Create original log entry for removal
-            string originalLogEntry = $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {type} | {activity}";
+            // Create original log entry for removal - ensure exact format match
+            string originalLogEntry = string.IsNullOrEmpty(type) ? 
+                $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {activity}" :
+                $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {type} | {activity}";
 
             // Open edit dialog
             using (var editDialog = new EditActivityDialog(startTime, endTime, type, activity))
@@ -888,8 +890,9 @@ namespace AdinersDailyActivityApp
                     // Remove original entry
                     RemoveActivityFromLogFile(originalLogEntry);
                     
-                    // Add new entry
-                    string newLogEntry = $"[{editDialog.EndTime.ToString(CultureInfo.InvariantCulture)}] {editDialog.ActivityType} | {editDialog.ActivityText}";
+                    // Add new entry with consistent format
+                    string newTypePart = string.IsNullOrEmpty(editDialog.ActivityType) ? "" : $"{editDialog.ActivityType} | ";
+                    string newLogEntry = $"[{editDialog.EndTime.ToString(CultureInfo.InvariantCulture)}] {newTypePart}{editDialog.ActivityText}";
                     string logFilePath = GetLogFilePath();
                     File.AppendAllText(logFilePath, newLogEntry + Environment.NewLine);
                     
@@ -979,8 +982,10 @@ namespace AdinersDailyActivityApp
             if (!DateTime.TryParseExact($"{dateStr} {endStr}", "dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime endTime))
                 return;
 
-            // Create log entry for removal
-            string logEntryToRemove = $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {type} | {activity}";
+            // Create log entry for removal - ensure exact format match
+            string logEntryToRemove = string.IsNullOrEmpty(type) ? 
+                $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {activity}" :
+                $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {type} | {activity}";
 
             // Confirm deletion
             var result = ShowDarkMessageBox($"Are you sure you want to delete this activity?\n\n{activity}\n\nThis action cannot be undone.", 
@@ -1276,7 +1281,7 @@ namespace AdinersDailyActivityApp
             if (File.Exists(logFilePath))
             {
                 string[] lines = File.ReadAllLines(logFilePath);
-                var filteredLines = lines.Where(line => !line.Trim().Equals(logEntryToRemove.Trim(), StringComparison.OrdinalIgnoreCase));
+                var filteredLines = lines.Where(line => !line.Trim().Equals(logEntryToRemove.Trim(), StringComparison.Ordinal));
                 File.WriteAllLines(logFilePath, filteredLines);
             }
         }
