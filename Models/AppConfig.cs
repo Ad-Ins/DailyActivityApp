@@ -52,6 +52,12 @@ namespace AdinersDailyActivityApp
         public string JiraUrl { get; set; } = string.Empty;
         public string JiraUsername { get; set; } = string.Empty;
         public string JiraPasswordEncrypted { get; set; } = string.Empty;
+        
+        // Clockify settings
+        public string ClockifyApiKey { get; set; } = string.Empty;
+        public string ClockifyWorkspaceId { get; set; } = string.Empty;
+        public string ClockifyProjectId { get; set; } = string.Empty;
+        public bool ClockifyAutoCreateTasks { get; set; } = true;
 
         // Enkripsi / dekripsi sederhana menggunakan DPAPI
         public static string Encrypt(string plain)

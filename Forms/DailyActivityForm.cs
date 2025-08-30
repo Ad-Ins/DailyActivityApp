@@ -86,6 +86,12 @@ namespace AdinersDailyActivityApp
         // History expand/collapse functionality
         private HashSet<string> expandedHeaders = new();
         
+        // Clockify integration
+        private ClockifyService clockifyService = null!;
+        private string currentClockifyTimeEntryId = "";
+        private Timer clockifyCheckTimer = null!;
+        private string clockifyUserId = "";
+        
         private const string TypeHint = "Enter type...";
         private const string ActivityHint = "Enter activity...";
         #endregion
@@ -96,6 +102,7 @@ namespace AdinersDailyActivityApp
             InitializeComponent();
             SetupForm();
             LoadConfig();
+            InitializeClockify();
             StartDisplayTimer();
             LoadLogHistory();
             SystemEvents.SessionEnding += SystemEvents_SessionEnding;
@@ -128,9 +135,11 @@ namespace AdinersDailyActivityApp
             trayMenu.ForeColor = Color.White;
             trayMenu.Items.Add("Input Activity Now", null, OnInputNowClicked);
             trayMenu.Items.Add("Stop Timer", null, OnStopTimerClicked);
+            trayMenu.Items.Add("Dashboard", null, OnDashboardClicked);
             trayMenu.Items.Add("Export Log to Excel", null, OnExportLogClicked);
             trayMenu.Items.Add("Set Interval...", null, OnSetIntervalClicked);
             trayMenu.Items.Add("Exclude Times...", null, OnExcludeTimesClicked);
+            trayMenu.Items.Add("Clockify Settings...", null, OnClockifySettingsClicked);
             trayMenu.Items.Add("Timer Information", null, OnTestTimerClicked);
             trayMenu.Items.Add("-");
             var dontShowMenuItem = new ToolStripMenuItem("Don't show popup today");
@@ -180,6 +189,7 @@ namespace AdinersDailyActivityApp
             historyContextMenu.ForeColor = Color.White;
             historyContextMenu.Items.Add("Edit Activity (F2)", null, OnEditHistoryClicked);
             historyContextMenu.Items.Add("Delete Activities (F3)", null, OnDeleteHistoryClicked);
+            historyContextMenu.Items.Add("Sync to Clockify (F4)", null, OnSyncToClockifyClicked);
             lstActivityHistory.ContextMenuStrip = historyContextMenu;
             lstActivityHistory.KeyDown += LstActivityHistory_KeyDown;
         }
@@ -291,10 +301,10 @@ namespace AdinersDailyActivityApp
                     cmbType.DroppedDown = true;
                 }
             };
-            cmbType.DropDown += (s, e) => {
+            cmbType.DropDown += async (s, e) => {
                 // Refresh items when dropdown opens
                 var currentText = cmbType.Text;
-                var uniqueTypes = GetUniqueTypesFromLog();
+                var uniqueTypes = await GetUniqueTypesFromAllSourcesAsync();
                 cmbType.Items.Clear();
                 cmbType.Items.AddRange(uniqueTypes.ToArray());
                 cmbType.Text = currentText;
@@ -400,6 +410,11 @@ namespace AdinersDailyActivityApp
                 OnDeleteHistoryClicked(sender, e);
                 e.Handled = true;
             }
+            if (e.KeyCode == Keys.F4)
+            {
+                OnSyncToClockifyClicked(sender, e);
+                e.Handled = true;
+            }
         }
 
         private void LstActivityHistory_DrawItem(object? sender, DrawItemEventArgs e)
@@ -432,6 +447,11 @@ namespace AdinersDailyActivityApp
             else if (e.KeyCode == Keys.F3)
             {
                 OnDeleteHistoryClicked(sender, e);
+                e.Handled = true;
+            }
+            else if (e.KeyCode == Keys.F4)
+            {
+                OnSyncToClockifyClicked(sender, e);
                 e.Handled = true;
             }
         }
@@ -672,6 +692,37 @@ namespace AdinersDailyActivityApp
             timerForm.ShowDialog();
         }
         
+        private void InitializeClockify()
+        {
+            clockifyService = new ClockifyService();
+            if (!string.IsNullOrEmpty(config.ClockifyApiKey))
+            {
+                clockifyService.SetApiKey(config.ClockifyApiKey);
+            }
+        }
+        
+        private void OnClockifySettingsClicked(object? sender, EventArgs e)
+        {
+            using (var clockifyDialog = new ClockifySettingsDialog(
+                config.ClockifyApiKey,
+                config.ClockifyWorkspaceId,
+                config.ClockifyProjectId,
+                config.ClockifyAutoCreateTasks))
+            {
+                if (clockifyDialog.ShowDialog() == DialogResult.OK)
+                {
+                    config.ClockifyApiKey = clockifyDialog.ApiKey;
+                    config.ClockifyWorkspaceId = clockifyDialog.WorkspaceId;
+                    config.ClockifyProjectId = clockifyDialog.ProjectId;
+                    config.ClockifyAutoCreateTasks = clockifyDialog.AutoCreateTasks;
+                    config.Save();
+                    
+                    InitializeClockify();
+                    trayIcon.ShowBalloonTip(2000, "Clockify Settings", "Settings saved successfully!", ToolTipIcon.Info);
+                }
+            }
+        }
+        
         private void OnDontShowTodayClicked(object? sender, EventArgs e)
         {
             var menuItem = sender as ToolStripMenuItem;
@@ -871,7 +922,7 @@ namespace AdinersDailyActivityApp
             aboutForm.ShowDialog();
         }
 
-        private void OnEditHistoryClicked(object? sender, EventArgs e)
+        private async void OnEditHistoryClicked(object? sender, EventArgs e)
         {
             // Check if multiple items are selected
             if (lstActivityHistory.SelectedItems.Count > 1)
@@ -961,44 +1012,77 @@ namespace AdinersDailyActivityApp
 
             // Create original log entry for removal - ensure exact format match
             string originalLogEntry = string.IsNullOrEmpty(type) ? 
-                $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {activity}" :
-                $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {type} | {activity}";
+                $"[{endTime.ToString(CultureInfo.InvariantCulture)}] [SYNCED] {activity}" :
+                $"[{endTime.ToString(CultureInfo.InvariantCulture)}] [SYNCED] {type} | {activity}";
+            
+            // Try LOCAL flag if SYNCED not found
+            if (!File.ReadAllText(GetLogFilePath()).Contains(originalLogEntry))
+            {
+                originalLogEntry = string.IsNullOrEmpty(type) ? 
+                    $"[{endTime.ToString(CultureInfo.InvariantCulture)}] [LOCAL] {activity}" :
+                    $"[{endTime.ToString(CultureInfo.InvariantCulture)}] [LOCAL] {type} | {activity}";
+            }
 
             // Open edit dialog
             using (var editDialog = new EditActivityDialog(startTime, endTime, type, activity))
             {
                 if (editDialog.ShowDialog() == DialogResult.OK)
                 {
-                    // Remove original entry
-                    RemoveActivityFromLogFile(originalLogEntry);
+                    // Extract Clockify ID from original entry
+                    string clockifyId = ExtractClockifyIdFromLogEntry(originalLogEntry);
+                    
+                    // Remove original entry from log file
+                    string editLogFilePath = GetLogFilePath();
+                    if (File.Exists(editLogFilePath))
+                    {
+                        var lines = File.ReadAllLines(editLogFilePath).ToList();
+                        for (int i = lines.Count - 1; i >= 0; i--)
+                        {
+                            if (lines[i].Contains(activity))
+                            {
+                                lines.RemoveAt(i);
+                                break;
+                            }
+                        }
+                        File.WriteAllLines(editLogFilePath, lines);
+                    }
+                    
+                    // Update Clockify if entry was synced
+                    bool updatedInClockify = false;
+                    if (!string.IsNullOrEmpty(clockifyId))
+                    {
+                        updatedInClockify = await UpdateClockifyTimeEntryAsync(clockifyId, editDialog.ActivityType, editDialog.ActivityText, editDialog.StartTime, editDialog.EndTime);
+                    }
                     
                     // Add new entry with consistent format
                     string newTypePart = string.IsNullOrEmpty(editDialog.ActivityType) ? "" : $"{editDialog.ActivityType} | ";
-                    string newLogEntry = $"[{editDialog.EndTime.ToString(CultureInfo.InvariantCulture)}] {newTypePart}{editDialog.ActivityText}";
+                    string syncFlag = updatedInClockify ? "[SYNCED]" : "[LOCAL]";
+                    string clockifyIdPart = updatedInClockify ? $" [CID:{clockifyId}]" : "";
+                    string newLogEntry = $"[{editDialog.EndTime.ToString(CultureInfo.InvariantCulture)}] {syncFlag} {newTypePart}{editDialog.ActivityText}{clockifyIdPart}";
                     string logFilePath = GetLogFilePath();
                     File.AppendAllText(logFilePath, newLogEntry + Environment.NewLine);
                     
                     // Refresh display
                     LoadLogHistory();
                     
-                    trayIcon.ShowBalloonTip(2000, "Activity Updated", "Activity has been successfully updated.", ToolTipIcon.Info);
+                    string updateMessage = updatedInClockify ? "Activity updated in both local and Clockify." : "Activity updated locally.";
+                    trayIcon.ShowBalloonTip(2000, "Activity Updated", updateMessage, ToolTipIcon.Info);
                 }
             }
         }
         
-        private void OnDeleteHistoryClicked(object? sender, EventArgs e)
+        private async void OnDeleteHistoryClicked(object? sender, EventArgs e)
         {
-            // Get selected items (support multiple selection)
+            // Get selected items
             var selectedItems = lstActivityHistory.SelectedItems.Cast<object>().ToList();
             
-            // If no selection, try to use the first sub-item (activity) in the list
+            // If no selection, select first activity
             if (selectedItems.Count == 0)
             {
-                // Find first sub-item (activity) in the list
                 for (int i = 0; i < lstActivityHistory.Items.Count; i++)
                 {
                     string item = lstActivityHistory.Items[i].ToString();
-                    if (item.StartsWith("     ")) // This is a sub-item (activity)
+                    if (item.StartsWith("     "))
                     {
                         lstActivityHistory.SelectedIndex = i;
                         selectedItems = new List<object> { lstActivityHistory.Items[i] };
@@ -1013,16 +1097,22 @@ namespace AdinersDailyActivityApp
                 }
             }
 
-            // Filter out headers - only allow deleting activities
-            var activitiesToDelete = new List<(string item, int index)>();
-            for (int i = 0; i < lstActivityHistory.Items.Count; i++)
+            // Filter activities only
+            var activitiesToDelete = new List<string>();
+            foreach (var item in selectedItems)
             {
-                if (selectedItems.Contains(lstActivityHistory.Items[i]))
+                string itemText = item.ToString();
+                if (itemText.StartsWith("     "))
                 {
-                    string item = lstActivityHistory.Items[i].ToString();
-                    if (item.StartsWith("     ")) // This is a sub-item (activity)
+                    // Extract activity name for display
+                    int bracketEnd = itemText.IndexOf(']');
+                    if (bracketEnd > 0)
                     {
-                        activitiesToDelete.Add((item, i));
+                        string activityName = itemText.Substring(bracketEnd + 1).Trim();
+                        // Remove sync icon
+                        if (activityName.StartsWith("✓ ") || activityName.StartsWith("⚠ "))
+                            activityName = activityName.Substring(2);
+                        activitiesToDelete.Add(activityName);
                     }
                 }
             }
@@ -1033,83 +1123,44 @@ namespace AdinersDailyActivityApp
                 return;
             }
 
-            // Prepare log entries for removal
-            var logEntriesToRemove = new List<string>();
-            var activityNames = new List<string>();
-            
-            foreach (var (selectedItem, selectedIndex) in activitiesToDelete)
-            {
-                // Parse sub-item to get activity details
-                int closingBracketIndex = selectedItem.IndexOf(']');
-                if (closingBracketIndex == -1) continue;
-
-                string inside = selectedItem.Substring(6, closingBracketIndex - 6); // Skip "     ["
-                string[] parts = inside.Split('|');
-                if (parts.Length != 2) continue;
-
-                string timesStr = parts[0].Trim();
-                string[] timeParts = timesStr.Split('-');
-                if (timeParts.Length != 2) continue;
-
-                string endStr = timeParts[1].Trim();
-                string activity = selectedItem.Substring(closingBracketIndex + 1).Trim();
-                activityNames.Add(activity);
-
-                // Find date and type from header
-                string dateStr = "";
-                string type = "";
-                for (int i = selectedIndex - 1; i >= 0; i--)
-                {
-                    string item = lstActivityHistory.Items[i].ToString();
-                    if (!item.StartsWith("     ")) // Found header
-                    {
-                        string headerWithoutIcon = item.Substring(2); // Remove icon
-                        int headerBracketIndex = headerWithoutIcon.IndexOf(']');
-                        if (headerBracketIndex != -1)
-                        {
-                            string headerInside = headerWithoutIcon.Substring(1, headerBracketIndex - 1);
-                            string[] headerParts = headerInside.Split('|');
-                            if (headerParts.Length == 3) // date | start-end | duration
-                            {
-                                dateStr = headerParts[0].Trim();
-                                type = headerWithoutIcon.Substring(headerBracketIndex + 1).Trim();
-                            }
-                        }
-                        break;
-                    }
-                }
-
-                if (string.IsNullOrEmpty(dateStr)) continue;
-
-                // Parse end time to create log entry
-                if (!DateTime.TryParseExact($"{dateStr} {endStr}", "dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime endTime))
-                    continue;
-
-                // Create log entry for removal - ensure exact format match
-                string logEntryToRemove = string.IsNullOrEmpty(type) ? 
-                    $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {activity}" :
-                    $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {type} | {activity}";
-                    
-                logEntriesToRemove.Add(logEntryToRemove);
-            }
-            
-            if (logEntriesToRemove.Count == 0) return;
-
             // Confirm deletion
             string confirmMessage = activitiesToDelete.Count == 1 ?
-                $"Are you sure you want to delete this activity?\n\n{activityNames[0]}\n\nThis action cannot be undone." :
-                $"Are you sure you want to delete these {activitiesToDelete.Count} activities?\n\n{string.Join("\n", activityNames.Take(5))}{(activityNames.Count > 5 ? "\n...and more" : "")}\n\nThis action cannot be undone.";
+                $"Are you sure you want to delete this activity?\n\n{activitiesToDelete[0]}\n\nThis action cannot be undone." :
+                $"Are you sure you want to delete these {activitiesToDelete.Count} activities?\n\n{string.Join("\n", activitiesToDelete.Take(3))}{(activitiesToDelete.Count > 3 ? "\n...and more" : "")}\n\nThis action cannot be undone.";
                 
-            var result = ShowDarkMessageBox(confirmMessage, 
-                activitiesToDelete.Count == 1 ? "Delete Activity" : "Delete Activities", 
-                MessageBoxButtons.YesNo);
+            var result = ShowDarkMessageBox(confirmMessage, "Delete Activities", MessageBoxButtons.YesNo);
             
             if (result == DialogResult.Yes)
             {
-                // Remove all entries from log file
-                foreach (string logEntry in logEntriesToRemove)
+                // Simple approach: remove lines containing the activity names
+                string logFilePath = GetLogFilePath();
+                if (File.Exists(logFilePath))
                 {
-                    RemoveActivityFromLogFile(logEntry);
+                    var lines = File.ReadAllLines(logFilePath).ToList();
+                    var linesToRemove = new List<string>();
+                    
+                    foreach (string activityName in activitiesToDelete)
+                    {
+                        // Find and mark lines for removal
+                        for (int i = lines.Count - 1; i >= 0; i--)
+                        {
+                            string line = lines[i];
+                            if (line.Contains(activityName) && !linesToRemove.Contains(line))
+                            {
+                                linesToRemove.Add(line);
+                                break; // Only remove first match to avoid duplicates
+                            }
+                        }
+                    }
+                    
+                    // Remove the lines
+                    foreach (string lineToRemove in linesToRemove)
+                    {
+                        lines.Remove(lineToRemove);
+                    }
+                    
+                    // Write back to file
+                    File.WriteAllLines(logFilePath, lines);
                 }
                 
                 // Refresh display
@@ -1121,6 +1172,199 @@ namespace AdinersDailyActivityApp
                     
                 trayIcon.ShowBalloonTip(2000, "Activities Deleted", successMessage, ToolTipIcon.Info);
             }
+        }
+        
+        private async void OnSyncToClockifyClicked(object? sender, EventArgs e)
+        {
+            if (!IsClockifyConnected())
+            {
+                ShowDarkMessageBox("Please configure Clockify settings first to sync activities.", "Clockify Not Connected");
+                return;
+            }
+            
+            // Find all unsynced activities
+            var unsyncedActivities = GetUnsyncedActivities();
+            
+            if (unsyncedActivities.Count == 0)
+            {
+                ShowDarkMessageBox("No unsynced activities found. All activities are already synced to Clockify.", "No Activities to Sync");
+                return;
+            }
+            
+            // Show confirmation
+            string confirmMessage = $"Found {unsyncedActivities.Count} unsynced activities.\n\nDo you want to sync them to Clockify?";
+            var result = ShowDarkMessageBox(confirmMessage, "Sync to Clockify", MessageBoxButtons.YesNo);
+            
+            if (result == DialogResult.Yes)
+            {
+                int syncedCount = 0;
+                int failedCount = 0;
+                
+                foreach (var activity in unsyncedActivities)
+                {
+                    try
+                    {
+                        // Create time entry in Clockify
+                        string taskId = null;
+                        if (config.ClockifyAutoCreateTasks && !string.IsNullOrEmpty(activity.Type))
+                        {
+                            var task = await clockifyService.CreateTaskAsync(config.ClockifyWorkspaceId, config.ClockifyProjectId, activity.Type);
+                            taskId = task?.Id;
+                        }
+                        
+                        var timeEntry = await clockifyService.CreateTimeEntryAsync(
+                            config.ClockifyWorkspaceId,
+                            config.ClockifyProjectId,
+                            taskId,
+                            activity.Description,
+                            activity.StartTime,
+                            activity.EndTime);
+                        
+                        if (timeEntry != null)
+                        {
+                            // Update log entry to mark as synced
+                            UpdateLogEntryToSynced(activity.OriginalLogEntry, timeEntry.Id);
+                            syncedCount++;
+                        }
+                        else
+                        {
+                            failedCount++;
+                        }
+                    }
+                    catch
+                    {
+                        failedCount++;
+                    }
+                }
+                
+                // Refresh display
+                LoadLogHistory();
+                
+                // Show result
+                string resultMessage = $"Sync completed!\n\nSynced: {syncedCount} activities\nFailed: {failedCount} activities";
+                trayIcon.ShowBalloonTip(3000, "Clockify Sync", resultMessage, ToolTipIcon.Info);
+            }
+        }
+        
+        private List<UnsyncedActivity> GetUnsyncedActivities()
+        {
+            var unsyncedActivities = new List<UnsyncedActivity>();
+            string logFilePath = GetLogFilePath();
+            
+            if (!File.Exists(logFilePath)) return unsyncedActivities;
+            
+            var lines = File.ReadAllLines(logFilePath);
+            var entries = new List<(DateTime timestamp, string type, string activity, string originalLine)>();
+            
+            // Parse all entries - include LOCAL and entries without sync flags
+            foreach (string line in lines)
+            {
+                // Skip entries that are already synced
+                if (line.Contains("[SYNCED]") || line.Contains("[CID:"))
+                    continue;
+                    
+                var parsed = ParseLogEntry(line);
+                if (parsed != null)
+                {
+                    entries.Add((parsed.Value.timestamp, parsed.Value.type, parsed.Value.activity, line));
+                }
+            }
+            
+            // Group by date and type to calculate time segments
+            var dateGroups = entries.GroupBy(e => e.timestamp.Date).OrderBy(g => g.Key);
+            
+            foreach (var dateGroup in dateGroups)
+            {
+                var typeGroups = dateGroup.GroupBy(e => e.type, StringComparer.OrdinalIgnoreCase);
+                
+                foreach (var typeGroup in typeGroups)
+                {
+                    var typeEntries = typeGroup.ToList();
+                    DateTime? prevTime = new DateTime(dateGroup.Key.Year, dateGroup.Key.Month, dateGroup.Key.Day, 8, 0, 0);
+                    
+                    if (typeEntries.First().timestamp < prevTime.Value)
+                    {
+                        prevTime = typeEntries.First().timestamp;
+                    }
+                    
+                    foreach (var entry in typeEntries)
+                    {
+                        DateTime start = prevTime.Value;
+                        if (start > entry.timestamp) start = entry.timestamp;
+                        DateTime end = entry.timestamp;
+                        
+                        if ((end - start).TotalMinutes > 0)
+                        {
+                            // Clean activity description from sync icons
+                            string cleanDescription = entry.activity;
+                            if (cleanDescription.StartsWith("⚠ ") || cleanDescription.StartsWith("✓ "))
+                                cleanDescription = cleanDescription.Substring(2);
+                            
+                            unsyncedActivities.Add(new UnsyncedActivity
+                            {
+                                StartTime = start,
+                                EndTime = end,
+                                Type = entry.type,
+                                Description = cleanDescription.Trim(),
+                                OriginalLogEntry = entry.originalLine
+                            });
+                        }
+                        
+                        prevTime = end;
+                    }
+                }
+            }
+            
+            return unsyncedActivities;
+        }
+        
+        private void UpdateLogEntryToSynced(string originalEntry, string clockifyId)
+        {
+            string logFilePath = GetLogFilePath();
+            if (!File.Exists(logFilePath)) return;
+            
+            var lines = File.ReadAllLines(logFilePath).ToList();
+            
+            for (int i = 0; i < lines.Count; i++)
+            {
+                if (lines[i] == originalEntry)
+                {
+                    string updatedLine;
+                    if (lines[i].Contains("[LOCAL]"))
+                    {
+                        // Replace [LOCAL] with [SYNCED] and add Clockify ID
+                        updatedLine = lines[i].Replace("[LOCAL]", "[SYNCED]") + $" [CID:{clockifyId}]";
+                    }
+                    else
+                    {
+                        // Add [SYNCED] flag and Clockify ID to entry without flag
+                        int timestampEnd = lines[i].IndexOf(']');
+                        if (timestampEnd > 0)
+                        {
+                            string timestamp = lines[i].Substring(0, timestampEnd + 1);
+                            string rest = lines[i].Substring(timestampEnd + 1).Trim();
+                            updatedLine = $"{timestamp} [SYNCED] {rest} [CID:{clockifyId}]";
+                        }
+                        else
+                        {
+                            updatedLine = lines[i] + $" [SYNCED] [CID:{clockifyId}]";
+                        }
+                    }
+                    lines[i] = updatedLine;
+                    break;
+                }
+            }
+            
+            File.WriteAllLines(logFilePath, lines);
+        }
+        
+        private class UnsyncedActivity
+        {
+            public DateTime StartTime { get; set; }
+            public DateTime EndTime { get; set; }
+            public string Type { get; set; } = "";
+            public string Description { get; set; } = "";
+            public string OriginalLogEntry { get; set; } = "";
         }
 
 
@@ -1135,7 +1379,7 @@ namespace AdinersDailyActivityApp
         #endregion
 
         #region Methods
-        private void ShowFullScreenInput()
+        private async void ShowFullScreenInput()
         {
             if ((DateTime.Now - lastActivityInputTime).TotalSeconds < 60 && lastActivityInputTime != DateTime.MinValue)
             {
@@ -1143,9 +1387,9 @@ namespace AdinersDailyActivityApp
                 return;
             }
             
-            // Refresh dropdown items from log
+            // Refresh dropdown items from all sources
             cmbType.Items.Clear();
-            var uniqueTypes = GetUniqueTypesFromLog();
+            var uniqueTypes = await GetUniqueTypesFromAllSourcesAsync();
             cmbType.Items.AddRange(uniqueTypes.ToArray());
             
             // Reset form
@@ -1161,42 +1405,125 @@ namespace AdinersDailyActivityApp
             this.Activate();
         }
 
-        private List<string> GetUniqueTypesFromLog()
+        private async Task<List<string>> GetUniqueTypesFromAllSourcesAsync()
         {
-            string logFilePath = GetLogFilePath();
-            if (!File.Exists(logFilePath)) return new List<string>();
-
+            var allTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            
+            // 1. Load from default file
+            LoadDefaultActivityTypes(allTypes);
+            
+            // 2. Load from log history
+            LoadTypesFromLog(allTypes);
+            
+            // 3. Load from Clockify if connected
+            if (IsClockifyConnected())
+            {
+                await LoadTypesFromClockifyAsync(allTypes);
+            }
+            
+            return allTypes.OrderBy(t => t).ToList();
+        }
+        
+        private void LoadDefaultActivityTypes(HashSet<string> types)
+        {
             try
             {
-                string[] lines = File.ReadAllLines(logFilePath);
-                var types = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                string defaultTypesPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "default_activity_types.txt");
+                if (File.Exists(defaultTypesPath))
+                {
+                    var lines = File.ReadAllLines(defaultTypesPath);
+                    foreach (var line in lines)
+                    {
+                        if (!string.IsNullOrWhiteSpace(line))
+                            types.Add(line.Trim());
+                    }
+                }
+            }
+            catch { }
+        }
+        
+        private void LoadTypesFromLog(HashSet<string> types)
+        {
+            try
+            {
+                string logFilePath = GetLogFilePath();
+                if (!File.Exists(logFilePath)) return;
                 
+                string[] lines = File.ReadAllLines(logFilePath);
                 foreach (string line in lines)
                 {
                     if (string.IsNullOrWhiteSpace(line)) continue;
                     
-                    // Format: [timestamp] type | activity
                     int timestampEndIndex = line.IndexOf(']');
                     if (timestampEndIndex > 0 && timestampEndIndex + 2 < line.Length)
                     {
                         string rest = line.Substring(timestampEndIndex + 2).Trim();
+                        
+                        // Remove sync flags
+                        if (rest.StartsWith("[SYNCED]") || rest.StartsWith("[LOCAL]"))
+                        {
+                            int flagEnd = rest.IndexOf(']', 1);
+                            if (flagEnd != -1) rest = rest.Substring(flagEnd + 1).Trim();
+                        }
+                        
                         int pipeIndex = rest.IndexOf('|');
                         if (pipeIndex > 0)
                         {
                             string type = rest.Substring(0, pipeIndex).Trim();
                             if (!string.IsNullOrEmpty(type))
-                            {
                                 types.Add(type);
-                            }
                         }
                     }
                 }
-                return types.OrderBy(t => t).ToList();
             }
-            catch
+            catch { }
+        }
+        
+        private async Task LoadTypesFromClockifyAsync(HashSet<string> types)
+        {
+            try
             {
-                return new List<string>();
+                var tasks = await clockifyService.GetTasksAsync(config.ClockifyWorkspaceId, config.ClockifyProjectId);
+                foreach (var task in tasks)
+                {
+                    if (!string.IsNullOrEmpty(task.Name))
+                        types.Add(task.Name);
+                }
             }
+            catch { }
+        }
+        
+        private async Task<bool> CanCreateTaskInClockifyAsync()
+        {
+            if (!IsClockifyConnected()) return false;
+            
+            try
+            {
+                // Try to create a test task to check permission
+                var testTask = await clockifyService.CreateTaskAsync(config.ClockifyWorkspaceId, config.ClockifyProjectId, "__TEST_PERMISSION__");
+                if (testTask != null)
+                {
+                    // Delete the test task immediately
+                    await clockifyService.DeleteTimeEntryAsync(config.ClockifyWorkspaceId, testTask.Id);
+                    return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+        
+        private bool IsClockifyConnected()
+        {
+            return !string.IsNullOrEmpty(config.ClockifyApiKey) && 
+                   !string.IsNullOrEmpty(config.ClockifyWorkspaceId) && 
+                   !string.IsNullOrEmpty(config.ClockifyProjectId);
+        }
+        
+        private List<string> GetUniqueTypesFromLog()
+        {
+            var types = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            LoadTypesFromLog(types);
+            return types.OrderBy(t => t).ToList();
         }
 
         private void SaveActivity()
@@ -1220,7 +1547,7 @@ namespace AdinersDailyActivityApp
             }
         }
         
-        private void StartTimer()
+        private async void StartTimer()
         {
             string type = cmbType.Text.Trim();
             string activity = txtActivity.Text.Trim();
@@ -1232,6 +1559,19 @@ namespace AdinersDailyActivityApp
             {
                 ShowDarkMessageBox("Please enter an activity description to start the timer.", "Activity Required");
                 return;
+            }
+            
+            // Check if user entered a new task type and has permission to create
+            if (!string.IsNullOrEmpty(type) && IsClockifyConnected())
+            {
+                var existingTasks = await clockifyService.GetTasksAsync(config.ClockifyWorkspaceId, config.ClockifyProjectId);
+                bool taskExists = existingTasks.Any(t => t.Name.Equals(type, StringComparison.OrdinalIgnoreCase));
+                
+                if (!taskExists && config.ClockifyAutoCreateTasks)
+                {
+                    // Task will be created automatically in StartClockifyTimerAsync
+                    trayIcon.ShowBalloonTip(2000, "New Task", $"Creating new task: {type}", ToolTipIcon.Info);
+                }
             }
             
             currentActivityType = type;
@@ -1246,6 +1586,10 @@ namespace AdinersDailyActivityApp
             
             UpdateTrayIcon();
             trayIcon.ShowBalloonTip(2000, "Timer Started", $"Timer started for: {activity}", ToolTipIcon.Info);
+            
+            // Start Clockify timer if configured
+            _ = StartClockifyTimerAsync(type, activity);
+            
             this.Hide();
         }
         
@@ -1256,13 +1600,16 @@ namespace AdinersDailyActivityApp
             DateTime endTime = DateTime.Now;
             elapsedTime = endTime - timerStartTime;
             
-            // Save to log
+            // Save to log with sync flag and Clockify ID
             string typePart = string.IsNullOrEmpty(currentActivityType) ? "" : $"{currentActivityType} | ";
-            string logEntry = $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {typePart}{currentActivityDescription}";
+            string syncFlag = !string.IsNullOrEmpty(currentClockifyTimeEntryId) ? "[SYNCED]" : "[LOCAL]";
+            string clockifyIdPart = !string.IsNullOrEmpty(currentClockifyTimeEntryId) ? $" [CID:{currentClockifyTimeEntryId}]" : "";
+            string logEntry = $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {syncFlag} {typePart}{currentActivityDescription}{clockifyIdPart}";
             string logFilePath = GetLogFilePath();
             File.AppendAllText(logFilePath, logEntry + Environment.NewLine);
             
-            int totalMinutes = (int)(endTime - timerStartTime).TotalMinutes;
+            var duration = endTime - timerStartTime;
+            string durationStr = $"{(int)duration.TotalHours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2}";
             string activityDesc = currentActivityDescription;
             
             // Reset timer state
@@ -1285,7 +1632,10 @@ namespace AdinersDailyActivityApp
             UpdateTrayIcon();
             
             trayIcon.ShowBalloonTip(3000, "Timer Stopped", 
-                $"Activity logged: {totalMinutes} minutes\n{activityDesc}", ToolTipIcon.Info);
+                $"Activity logged: {durationStr}\n{activityDesc}", ToolTipIcon.Info);
+                
+            // Stop Clockify timer if running
+            _ = StopClockifyTimerAsync();
         }
 
         private void LoadLogHistory()
@@ -1305,6 +1655,30 @@ namespace AdinersDailyActivityApp
                         if (DateTime.TryParse(timestampStr, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime time))
                         {
                             string rest = line.Substring(timestampEndIndex + 2).Trim();
+                            
+                            // Extract sync flag
+                            bool isSynced = false;
+                            if (rest.StartsWith("[SYNCED]"))
+                            {
+                                isSynced = true;
+                                rest = rest.Substring(8).Trim(); // Remove "[SYNCED] "
+                            }
+                            else if (rest.StartsWith("[LOCAL]"))
+                            {
+                                rest = rest.Substring(7).Trim(); // Remove "[LOCAL] "
+                            }
+                            
+                            // Remove Clockify ID if present for display
+                            int cidIndex = rest.IndexOf(" [CID:");
+                            if (cidIndex != -1)
+                            {
+                                int endIndex = rest.IndexOf("]", cidIndex);
+                                if (endIndex != -1)
+                                {
+                                    rest = rest.Substring(0, cidIndex) + rest.Substring(endIndex + 1);
+                                }
+                            }
+                            
                             string type = "";
                             string activity = rest;
                             int pipeIndex = rest.IndexOf('|');
@@ -1313,6 +1687,11 @@ namespace AdinersDailyActivityApp
                                 type = rest.Substring(0, pipeIndex).Trim();
                                 activity = rest.Substring(pipeIndex + 1).Trim();
                             }
+                            
+                            // Add sync status to activity for display
+                            string syncIcon = isSynced ? "✓" : "⚠";
+                            activity = $"{syncIcon} {activity}";
+                            
                             entries.Add((time, type, activity));
                         }
                     }
@@ -1395,57 +1774,9 @@ namespace AdinersDailyActivityApp
             return $"{hours:D2}:{minutes:D2}:00";
         }
         
-        private void RemoveActivityFromLogFile(string logEntryToRemove)
-        {
-            string logFilePath = GetLogFilePath();
-            if (File.Exists(logFilePath))
-            {
-                string[] lines = File.ReadAllLines(logFilePath);
-                var filteredLines = new List<string>();
-                bool entryRemoved = false;
-                
-                // Extract components from the entry we want to remove
-                var targetComponents = ParseLogEntry(logEntryToRemove);
-                if (targetComponents == null)
-                {
-                    ShowDarkMessageBox("Could not parse log entry to remove.", "Delete Error");
-                    return;
-                }
-                
-                foreach (string line in lines)
-                {
-                    var lineComponents = ParseLogEntry(line);
-                    
-                    // If we can't parse the line, keep it
-                    if (lineComponents == null)
-                    {
-                        filteredLines.Add(line);
-                        continue;
-                    }
-                    
-                    // Compare components instead of exact string match
-                    bool isMatch = lineComponents.Value.type.Equals(targetComponents.Value.type, StringComparison.OrdinalIgnoreCase) &&
-                                  lineComponents.Value.activity.Equals(targetComponents.Value.activity, StringComparison.OrdinalIgnoreCase) &&
-                                  Math.Abs((lineComponents.Value.timestamp - targetComponents.Value.timestamp).TotalMinutes) < 1; // Within 1 minute
-                    
-                    if (isMatch && !entryRemoved)
-                    {
-                        entryRemoved = true; // Skip this line (remove it)
-                    }
-                    else
-                    {
-                        filteredLines.Add(line);
-                    }
-                }
-                
-                File.WriteAllLines(logFilePath, filteredLines);
-                
-                if (!entryRemoved)
-                {
-                    ShowDarkMessageBox("Activity not found in log file. It may have already been deleted.", "Delete Warning");
-                }
-            }
-        }
+
+        
+
         
         private (DateTime timestamp, string type, string activity)? ParseLogEntry(string logEntry)
         {
@@ -1459,8 +1790,30 @@ namespace AdinersDailyActivityApp
                     return null;
                 
                 string rest = logEntry.Substring(timestampEndIndex + 2).Trim();
+                
+                // Remove sync flag if present
+                if (rest.StartsWith("[SYNCED]"))
+                {
+                    rest = rest.Substring(8).Trim();
+                }
+                else if (rest.StartsWith("[LOCAL]"))
+                {
+                    rest = rest.Substring(7).Trim();
+                }
+                
+                // Remove Clockify ID if present
+                int cidIndex = rest.IndexOf(" [CID:");
+                if (cidIndex != -1)
+                {
+                    int endIndex = rest.IndexOf("]", cidIndex);
+                    if (endIndex != -1)
+                    {
+                        rest = rest.Substring(0, cidIndex) + rest.Substring(endIndex + 1);
+                    }
+                }
+                
                 string type = "";
-                string activity = rest;
+                string activity = rest.Trim();
                 
                 int pipeIndex = rest.IndexOf('|');
                 if (pipeIndex > 0)
@@ -1720,6 +2073,23 @@ namespace AdinersDailyActivityApp
             displayTimer.Tick += DisplayTimer_Tick;
             displayTimer.Start();
             
+            // Initialize Clockify check timer
+            clockifyCheckTimer = new Timer();
+            clockifyCheckTimer.Interval = 10000; // Check every 10 seconds
+            clockifyCheckTimer.Tick += ClockifyCheckTimer_Tick;
+            clockifyCheckTimer.Start();
+            
+            // Get Clockify user ID
+            _ = Task.Run(async () => {
+                if (!string.IsNullOrEmpty(config.ClockifyApiKey))
+                {
+                    clockifyService.SetApiKey(config.ClockifyApiKey);
+                    var user = await clockifyService.GetCurrentUserAsync();
+                    if (user != null)
+                        clockifyUserId = user.Id;
+                }
+            });
+            
             UpdateTrayIcon();
         }
         
@@ -1783,9 +2153,11 @@ namespace AdinersDailyActivityApp
             
             DateTime now = DateTime.Now;
             
-            // Save current activity up to now
+            // Save current activity up to now with sync flag and Clockify ID
             string typePart = string.IsNullOrEmpty(currentActivityType) ? "" : $"{currentActivityType} | ";
-            string logEntry = $"[{now.ToString(CultureInfo.InvariantCulture)}] {typePart}{currentActivityDescription}";
+            string syncFlag = !string.IsNullOrEmpty(currentClockifyTimeEntryId) ? "[SYNCED]" : "[LOCAL]";
+            string clockifyIdPart = !string.IsNullOrEmpty(currentClockifyTimeEntryId) ? $" [CID:{currentClockifyTimeEntryId}]" : "";
+            string logEntry = $"[{now.ToString(CultureInfo.InvariantCulture)}] {syncFlag} {typePart}{currentActivityDescription}{clockifyIdPart}";
             string logFilePath = GetLogFilePath();
             File.AppendAllText(logFilePath, logEntry + Environment.NewLine);
             
@@ -1802,9 +2174,10 @@ namespace AdinersDailyActivityApp
             var excludePeriod = excludeTimes.FirstOrDefault(et => currentTime >= et.start && currentTime < et.end);
             string periodName = excludePeriod.name ?? "Break";
             
-            int totalMinutes = (int)(now - timerStartTime).TotalMinutes;
+            var duration = now - timerStartTime;
+            string durationStr = $"{(int)duration.TotalHours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2}";
             trayIcon.ShowBalloonTip(3000, $"Timer Paused - {periodName}", 
-                $"Activity saved: {totalMinutes} minutes\nTimer will resume after {periodName}", 
+                $"Activity saved: {durationStr}\nTimer will resume after {periodName}", 
                 ToolTipIcon.Info);
             
             LoadLogHistory();
@@ -1915,21 +2288,24 @@ namespace AdinersDailyActivityApp
             // Calculate midnight of the start date
             DateTime midnight = timerStartTime.Date.AddDays(1); // 00:00 of next day
             
-            // Save the activity from start time to midnight
+            // Save the activity from start time to midnight with sync flag and Clockify ID
             string typePart = string.IsNullOrEmpty(currentActivityType) ? "" : $"{currentActivityType} | ";
-            string logEntry = $"[{midnight.ToString(CultureInfo.InvariantCulture)}] {typePart}{currentActivityDescription}";
+            string syncFlag = !string.IsNullOrEmpty(currentClockifyTimeEntryId) ? "[SYNCED]" : "[LOCAL]";
+            string clockifyIdPart = !string.IsNullOrEmpty(currentClockifyTimeEntryId) ? $" [CID:{currentClockifyTimeEntryId}]" : "";
+            string logEntry = $"[{midnight.ToString(CultureInfo.InvariantCulture)}] {syncFlag} {typePart}{currentActivityDescription}{clockifyIdPart}";
             string logFilePath = GetLogFilePath();
             File.AppendAllText(logFilePath, logEntry + Environment.NewLine);
             
             // Calculate duration for notification
-            int totalMinutes = (int)(midnight - timerStartTime).TotalMinutes;
+            var duration = midnight - timerStartTime;
+            string durationStr = $"{(int)duration.TotalHours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2}";
             
             // Restart timer from midnight with same activity
             timerStartTime = midnight;
             
             // Show notification about auto-split
             trayIcon.ShowBalloonTip(3000, "Activity Auto-Split", 
-                $"Activity split at midnight: {totalMinutes} minutes logged\nTimer continues for: {currentActivityDescription}", 
+                $"Activity split at midnight: {durationStr} logged\nTimer continues for: {currentActivityDescription}", 
                 ToolTipIcon.Info);
             
             // Refresh history display
@@ -1941,6 +2317,9 @@ namespace AdinersDailyActivityApp
             // Update Stop Timer menu visibility
             var stopTimerItem = trayMenu.Items[1]; // Stop Timer is at index 1
             stopTimerItem.Visible = isTimerRunning || isTimerPausedForExclude;
+            
+            // Update Dashboard menu visibility based on Clockify connection
+            UpdateDashboardMenuVisibility();
             
             if (isTimerPausedForExclude)
             {
@@ -2136,6 +2515,475 @@ namespace AdinersDailyActivityApp
                 CreateParams cp = base.CreateParams;
                 cp.ExStyle |= 0x80;
                 return cp;
+            }
+        }
+        
+        private async Task StartClockifyTimerAsync(string type, string activity)
+        {
+            if (string.IsNullOrEmpty(config.ClockifyApiKey) || string.IsNullOrEmpty(config.ClockifyWorkspaceId) || string.IsNullOrEmpty(config.ClockifyProjectId))
+                return;
+                
+            try
+            {
+                string taskId = null;
+                
+                // Auto-create task if enabled
+                if (config.ClockifyAutoCreateTasks && !string.IsNullOrEmpty(type))
+                {
+                    var task = await clockifyService.CreateTaskAsync(config.ClockifyWorkspaceId, config.ClockifyProjectId, type);
+                    taskId = task?.Id;
+                }
+                
+                var timeEntry = await clockifyService.StartTimeEntryAsync(config.ClockifyWorkspaceId, config.ClockifyProjectId, taskId, activity);
+                if (timeEntry != null)
+                {
+                    currentClockifyTimeEntryId = timeEntry.Id;
+                }
+            }
+            catch { /* Ignore Clockify errors */ }
+        }
+        
+        private async Task StopClockifyTimerAsync()
+        {
+            if (string.IsNullOrEmpty(currentClockifyTimeEntryId) || string.IsNullOrEmpty(config.ClockifyWorkspaceId))
+                return;
+                
+            try
+            {
+                await clockifyService.StopTimeEntryAsync(config.ClockifyWorkspaceId, currentClockifyTimeEntryId);
+                currentClockifyTimeEntryId = "";
+            }
+            catch { /* Ignore Clockify errors */ }
+        }
+        
+        private async void ClockifyCheckTimer_Tick(object? sender, EventArgs e)
+        {
+            if (string.IsNullOrEmpty(config.ClockifyApiKey) || string.IsNullOrEmpty(config.ClockifyWorkspaceId) || string.IsNullOrEmpty(clockifyUserId))
+                return;
+                
+            try
+            {
+                var currentEntry = await clockifyService.GetCurrentTimeEntryAsync(config.ClockifyWorkspaceId, clockifyUserId);
+                
+                // If Clockify timer is stopped but local timer is running
+                if (currentEntry == null && isTimerRunning && !string.IsNullOrEmpty(currentClockifyTimeEntryId))
+                {
+                    // Auto-stop local timer
+                    this.Invoke(() => {
+                        StopTimer();
+                        trayIcon.ShowBalloonTip(3000, "Timer Auto-Stopped", 
+                            "Timer stopped automatically because Clockify timer was stopped from web.", 
+                            ToolTipIcon.Info);
+                    });
+                }
+            }
+            catch { /* Ignore Clockify errors */ }
+        }
+        
+        private string ExtractClockifyIdFromLogEntry(string logEntry)
+        {
+            try
+            {
+                int cidIndex = logEntry.IndexOf("[CID:");
+                if (cidIndex == -1) return "";
+                
+                int startIndex = cidIndex + 5;
+                int endIndex = logEntry.IndexOf("]", startIndex);
+                if (endIndex == -1) return "";
+                
+                return logEntry.Substring(startIndex, endIndex - startIndex);
+            }
+            catch
+            {
+                return "";
+            }
+        }
+        
+        private async Task<bool> UpdateClockifyTimeEntryAsync(string clockifyId, string type, string activity, DateTime startTime, DateTime endTime)
+        {
+            if (string.IsNullOrEmpty(config.ClockifyApiKey) || string.IsNullOrEmpty(config.ClockifyWorkspaceId) || string.IsNullOrEmpty(config.ClockifyProjectId))
+                return false;
+                
+            try
+            {
+                string taskId = null;
+                
+                if (config.ClockifyAutoCreateTasks && !string.IsNullOrEmpty(type))
+                {
+                    var task = await clockifyService.CreateTaskAsync(config.ClockifyWorkspaceId, config.ClockifyProjectId, type);
+                    taskId = task?.Id;
+                }
+                
+                var updatedEntry = await clockifyService.UpdateTimeEntryAsync(
+                    config.ClockifyWorkspaceId, 
+                    clockifyId, 
+                    config.ClockifyProjectId, 
+                    taskId, 
+                    activity, 
+                    startTime, 
+                    endTime);
+                    
+                return updatedEntry != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        
+        private async Task<bool> DeleteClockifyTimeEntryAsync(string clockifyId)
+        {
+            if (string.IsNullOrEmpty(config.ClockifyApiKey) || string.IsNullOrEmpty(config.ClockifyWorkspaceId))
+                return false;
+                
+            try
+            {
+                return await clockifyService.DeleteTimeEntryAsync(config.ClockifyWorkspaceId, clockifyId);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        
+        private void OnDashboardClicked(object? sender, EventArgs e)
+        {
+            var dashboardForm = new Forms.DashboardForm();
+            dashboardForm.Show();
+        }
+        
+        private async Task ShowDashboard()
+        {
+            if (!IsClockifyConnected())
+            {
+                ShowDarkMessageBox("Please configure Clockify settings first to view dashboard.", "Clockify Not Connected");
+                return;
+            }
+            
+            Form dashboardForm = new Form
+            {
+                Width = 700,
+                Height = 600,
+                Text = "Dashboard - Activity Summary",
+                StartPosition = FormStartPosition.CenterScreen,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false,
+                MinimizeBox = false,
+                BackColor = Color.FromArgb(30, 30, 30),
+                ForeColor = Color.White
+            };
+            
+            Label loadingLabel = new Label
+            {
+                Text = "Loading dashboard data...",
+                Location = new Point(20, 20),
+                Size = new Size(640, 30),
+                ForeColor = Color.FromArgb(100, 200, 255),
+                Font = new Font("Segoe UI", 12)
+            };
+            dashboardForm.Controls.Add(loadingLabel);
+            
+            dashboardForm.Show();
+            
+            try
+            {
+                var dashboardData = await clockifyService.GetDashboardDataAsync(config.ClockifyWorkspaceId, clockifyUserId);
+                var localData = GetLocalDashboardData();
+                
+                dashboardForm.Controls.Clear();
+                
+                // Today's Summary
+                var todayLabel = new Label
+                {
+                    Text = "📅 Today's Summary",
+                    Location = new Point(20, 20),
+                    Size = new Size(640, 25),
+                    ForeColor = Color.FromArgb(100, 200, 255),
+                    Font = new Font("Segoe UI", 12, FontStyle.Bold)
+                };
+                
+                var todayStats = new Label
+                {
+                    Text = $"Local: {localData.TodayHours}\nClockify: {CalculateHours(dashboardData.TodayEntries)}\nEntries: {localData.TodayEntries} local, {dashboardData.TodayEntries.Count} Clockify",
+                    Location = new Point(20, 50),
+                    Size = new Size(640, 60),
+                    ForeColor = Color.White,
+                    Font = new Font("Segoe UI", 10)
+                };
+                
+                // This Week Summary
+                var weekLabel = new Label
+                {
+                    Text = "📊 This Week Summary",
+                    Location = new Point(20, 130),
+                    Size = new Size(640, 25),
+                    ForeColor = Color.FromArgb(100, 200, 255),
+                    Font = new Font("Segoe UI", 12, FontStyle.Bold)
+                };
+                
+                var weekStats = new Label
+                {
+                    Text = $"Local: {localData.WeekHours}\nClockify: {CalculateHours(dashboardData.WeekEntries)}\nEntries: {localData.WeekEntries} local, {dashboardData.WeekEntries.Count} Clockify",
+                    Location = new Point(20, 160),
+                    Size = new Size(640, 60),
+                    ForeColor = Color.White,
+                    Font = new Font("Segoe UI", 10)
+                };
+                
+                // Top Activity
+                var topLabel = new Label
+                {
+                    Text = "🏆 Top Activity Type",
+                    Location = new Point(20, 240),
+                    Size = new Size(640, 25),
+                    ForeColor = Color.FromArgb(100, 200, 255),
+                    Font = new Font("Segoe UI", 12, FontStyle.Bold)
+                };
+                
+                var topStats = new Label
+                {
+                    Text = $"Most used: {localData.TopActivityType}\nTime spent: {localData.TopActivityHours}",
+                    Location = new Point(20, 270),
+                    Size = new Size(640, 40),
+                    ForeColor = Color.White,
+                    Font = new Font("Segoe UI", 10)
+                };
+                
+                // Chart Panel
+                var chartPanel = new Panel
+                {
+                    Location = new Point(20, 320),
+                    Size = new Size(640, 200),
+                    BackColor = Color.FromArgb(40, 40, 40)
+                };
+                chartPanel.Paint += (s, pe) => {
+                    var typeMinutes = new Dictionary<string, int>();
+                    foreach (var line in File.Exists(GetLogFilePath()) ? File.ReadAllLines(GetLogFilePath()) : new string[0])
+                    {
+                        var parsed = ParseLogEntry(line);
+                        if (parsed != null && !string.IsNullOrEmpty(parsed.Value.type))
+                        {
+                            typeMinutes[parsed.Value.type] = typeMinutes.GetValueOrDefault(parsed.Value.type, 0) + 30;
+                        }
+                    }
+                    DrawSimpleChart(pe.Graphics, chartPanel.ClientRectangle, typeMinutes, "Activity Types Distribution (This Week)");
+                };
+                
+                Button closeButton = new Button
+                {
+                    Text = "Close",
+                    Size = new Size(80, 30),
+                    Location = new Point(580, 530),
+                    FlatStyle = FlatStyle.Flat,
+                    BackColor = Color.FromArgb(50, 50, 50),
+                    ForeColor = Color.White
+                };
+                closeButton.FlatAppearance.BorderSize = 0;
+                closeButton.Click += (s, e) => dashboardForm.Close();
+                
+                dashboardForm.Controls.AddRange(new Control[] {
+                    todayLabel, todayStats, weekLabel, weekStats, topLabel, topStats, chartPanel, closeButton
+                });
+            }
+            catch
+            {
+                dashboardForm.Controls.Clear();
+                Label errorLabel = new Label
+                {
+                    Text = "Failed to load dashboard data. Please check your Clockify connection.",
+                    Location = new Point(20, 20),
+                    Size = new Size(640, 60),
+                    ForeColor = Color.FromArgb(220, 53, 69),
+                    Font = new Font("Segoe UI", 10)
+                };
+                
+                Button errorCloseButton = new Button
+                {
+                    Text = "Close",
+                    Size = new Size(80, 30),
+                    Location = new Point(580, 530),
+                    FlatStyle = FlatStyle.Flat,
+                    BackColor = Color.FromArgb(50, 50, 50),
+                    ForeColor = Color.White
+                };
+                errorCloseButton.FlatAppearance.BorderSize = 0;
+                errorCloseButton.Click += (s, e) => dashboardForm.Close();
+                
+                dashboardForm.Controls.Add(errorLabel);
+                dashboardForm.Controls.Add(errorCloseButton);
+            }
+        }
+        
+        private (string TodayHours, string WeekHours, int TodayEntries, int WeekEntries, string TopActivityType, string TopActivityHours) GetLocalDashboardData()
+        {
+            try
+            {
+                var today = DateTime.Today;
+                var weekStart = today.AddDays(-(int)today.DayOfWeek);
+                
+                string logFilePath = GetLogFilePath();
+                if (!File.Exists(logFilePath)) return ("00:00:00", "00:00:00", 0, 0, "None", "00:00:00");
+                
+                var lines = File.ReadAllLines(logFilePath);
+                var todayMinutes = 0;
+                var weekMinutes = 0;
+                var todayCount = 0;
+                var weekCount = 0;
+                var typeMinutes = new Dictionary<string, int>();
+                
+                foreach (var line in lines)
+                {
+                    var parsed = ParseLogEntry(line);
+                    if (parsed == null) continue;
+                    
+                    var (timestamp, type, activity) = parsed.Value;
+                    
+                    if (timestamp.Date == today)
+                    {
+                        todayMinutes += 30; // Assume 30 min average
+                        todayCount++;
+                    }
+                    
+                    if (timestamp.Date >= weekStart)
+                    {
+                        weekMinutes += 30;
+                        weekCount++;
+                        
+                        if (!string.IsNullOrEmpty(type))
+                        {
+                            typeMinutes[type] = typeMinutes.GetValueOrDefault(type, 0) + 30;
+                        }
+                    }
+                }
+                
+                var topType = typeMinutes.OrderByDescending(x => x.Value).FirstOrDefault();
+                
+                return (
+                    FormatMinutes(todayMinutes),
+                    FormatMinutes(weekMinutes),
+                    todayCount,
+                    weekCount,
+                    topType.Key ?? "None",
+                    FormatMinutes(topType.Value)
+                );
+            }
+            catch
+            {
+                return ("00:00:00", "00:00:00", 0, 0, "None", "00:00:00");
+            }
+        }
+        
+        private string CalculateHours(List<ClockifyTimeEntry> entries)
+        {
+            try
+            {
+                var totalMinutes = 0;
+                foreach (var entry in entries)
+                {
+                    if (entry.TimeInterval?.Start != null && entry.TimeInterval?.End != null)
+                    {
+                        if (DateTime.TryParse(entry.TimeInterval.Start, out var start) && DateTime.TryParse(entry.TimeInterval.End, out var end))
+                        {
+                            var duration = end - start;
+                            totalMinutes += (int)duration.TotalMinutes;
+                        }
+                    }
+                }
+                return FormatMinutes(totalMinutes);
+            }
+            catch
+            {
+                return "00:00:00";
+            }
+        }
+        
+        private string FormatMinutes(int totalMinutes)
+        {
+            var hours = totalMinutes / 60;
+            var minutes = totalMinutes % 60;
+            return $"{hours:D2}:{minutes:D2}:00";
+        }
+        
+        private void UpdateDashboardMenuVisibility()
+        {
+            // Find existing dashboard menu item
+            ToolStripMenuItem dashboardItem = null;
+            foreach (ToolStripItem item in trayMenu.Items)
+            {
+                if (item.Text == "Dashboard")
+                {
+                    dashboardItem = item as ToolStripMenuItem;
+                    break;
+                }
+            }
+            
+            bool shouldShowDashboard = IsClockifyConnected();
+            
+            if (shouldShowDashboard && dashboardItem == null)
+            {
+                // Add dashboard menu after Stop Timer (index 2)
+                var newDashboardItem = new ToolStripMenuItem("Dashboard", null, OnDashboardClicked);
+                trayMenu.Items.Insert(2, newDashboardItem);
+            }
+            else if (!shouldShowDashboard && dashboardItem != null)
+            {
+                // Remove dashboard menu
+                trayMenu.Items.Remove(dashboardItem);
+            }
+        }
+        
+        private void DrawSimpleChart(Graphics g, Rectangle bounds, Dictionary<string, int> data, string title)
+        {
+            if (data == null || data.Count == 0) return;
+            
+            // Chart area
+            var chartRect = new Rectangle(bounds.X + 10, bounds.Y + 30, bounds.Width - 20, bounds.Height - 40);
+            
+            // Title
+            using (var titleFont = new Font("Segoe UI", 10, FontStyle.Bold))
+            using (var titleBrush = new SolidBrush(Color.FromArgb(100, 200, 255)))
+            {
+                g.DrawString(title, titleFont, titleBrush, bounds.X + 10, bounds.Y + 5);
+            }
+            
+            // Simple bar chart
+            var maxValue = data.Values.Max();
+            if (maxValue == 0) return;
+            
+            var barWidth = chartRect.Width / Math.Max(data.Count, 1);
+            var x = chartRect.X;
+            
+            var colors = new Color[] {
+                Color.FromArgb(54, 162, 235),
+                Color.FromArgb(255, 99, 132),
+                Color.FromArgb(255, 205, 86),
+                Color.FromArgb(75, 192, 192),
+                Color.FromArgb(153, 102, 255)
+            };
+            
+            int colorIndex = 0;
+            foreach (var item in data.Take(5)) // Show top 5
+            {
+                var barHeight = (int)((double)item.Value / maxValue * chartRect.Height * 0.8);
+                var barRect = new Rectangle(x + 5, chartRect.Bottom - barHeight, barWidth - 10, barHeight);
+                
+                using (var brush = new SolidBrush(colors[colorIndex % colors.Length]))
+                {
+                    g.FillRectangle(brush, barRect);
+                }
+                
+                // Label
+                using (var labelFont = new Font("Segoe UI", 8))
+                using (var labelBrush = new SolidBrush(Color.White))
+                {
+                    var labelText = item.Key.Length > 8 ? item.Key.Substring(0, 8) + "..." : item.Key;
+                    var labelSize = g.MeasureString(labelText, labelFont);
+                    g.DrawString(labelText, labelFont, labelBrush, 
+                        x + (barWidth - labelSize.Width) / 2, chartRect.Bottom + 5);
+                }
+                
+                x += barWidth;
+                colorIndex++;
             }
         }
         #endregion

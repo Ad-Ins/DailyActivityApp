@@ -175,15 +175,13 @@ namespace AdinersDailyActivityApp.Dialogs
 
             if (newEndTime <= newStartTime)
             {
-                MessageBox.Show("End time must be after start time!", "Invalid Time", 
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                ShowDarkMessageBox("End time must be after start time!", "Invalid Time");
                 return;
             }
 
             if (string.IsNullOrWhiteSpace(txtActivity.Text))
             {
-                MessageBox.Show("Activity cannot be empty!", "Invalid Activity", 
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                ShowDarkMessageBox("Activity cannot be empty!", "Invalid Activity");
                 return;
             }
 
@@ -191,6 +189,51 @@ namespace AdinersDailyActivityApp.Dialogs
             EndTime = newEndTime;
             ActivityType = txtType.Text.Trim();
             ActivityText = txtActivity.Text.Trim();
+        }
+        
+        private DialogResult ShowDarkMessageBox(string message, string title)
+        {
+            Form darkForm = new Form
+            {
+                Width = 350,
+                Height = 150,
+                Text = title,
+                StartPosition = FormStartPosition.CenterParent,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false,
+                MinimizeBox = false,
+                BackColor = Color.FromArgb(30, 30, 30),
+                ForeColor = Color.White,
+                TopMost = true
+            };
+            
+            Label messageLabel = new Label
+            {
+                Text = message,
+                AutoSize = false,
+                Size = new Size(310, 60),
+                Location = new Point(20, 20),
+                TextAlign = ContentAlignment.MiddleLeft,
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10)
+            };
+            
+            Button okButton = new Button
+            {
+                Text = "OK",
+                DialogResult = DialogResult.OK,
+                Size = new Size(80, 30),
+                Location = new Point(250, 80),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(50, 50, 50),
+                ForeColor = Color.White
+            };
+            okButton.FlatAppearance.BorderSize = 0;
+            
+            darkForm.Controls.Add(messageLabel);
+            darkForm.Controls.Add(okButton);
+            
+            return darkForm.ShowDialog(this);
         }
     }
 }

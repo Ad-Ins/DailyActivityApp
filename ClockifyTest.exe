@@ -1,0 +1,57 @@
+// This will be a simple console app to test Clockify
+using System;
+using System.Net.Http;
+using System.Threading.Tasks;
+using System.Text.Json;
+
+class Program
+{
+    static async Task Main(string[] args)
+    {
+        Console.WriteLine("Testing Clockify API Key...");
+        
+        string apiKey = "YzNiZWFkMjctZWE5MC00NzM0LTlhNjgtYjUxYTA1NTBhZDEz";
+        
+        using var httpClient = new HttpClient();
+        httpClient.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+        
+        try
+        {
+            // Test user authentication
+            var response = await httpClient.GetAsync("https://api.clockify.me/api/v1/user");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                Console.WriteLine("✓ API Key is valid!");
+                Console.WriteLine($"Response: {json.Substring(0, Math.Min(200, json.Length))}...");
+                
+                // Test workspaces
+                var workspaceResponse = await httpClient.GetAsync("https://api.clockify.me/api/v1/workspaces");
+                if (workspaceResponse.IsSuccessStatusCode)
+                {
+                    var workspaceJson = await workspaceResponse.Content.ReadAsStringAsync();
+                    Console.WriteLine("✓ Workspaces accessible!");
+                    Console.WriteLine($"Workspaces: {workspaceJson.Substring(0, Math.Min(300, workspaceJson.Length))}...");
+                }
+                else
+                {
+                    Console.WriteLine("⚠ Could not access workspaces");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"✗ API Key invalid. Status: {response.StatusCode}");
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Error: {errorContent}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"✗ Error: {ex.Message}");
+        }
+        
+        Console.WriteLine("\nPress any key to exit...");
+        Console.ReadKey();
+    }
+}

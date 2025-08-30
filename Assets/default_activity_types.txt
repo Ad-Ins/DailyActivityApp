@@ -1,0 +1,13 @@
+Development
+Testing
+Bug Fix
+Code Review
+Meeting
+Documentation
+Research
+Planning
+Deployment
+Support
+Training
+Analysis
+Design
