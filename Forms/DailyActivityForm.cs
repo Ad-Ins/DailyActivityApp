@@ -179,7 +179,7 @@ namespace AdinersDailyActivityApp
             historyContextMenu.BackColor = Color.FromArgb(30, 30, 30);
             historyContextMenu.ForeColor = Color.White;
             historyContextMenu.Items.Add("Edit Activity (F2)", null, OnEditHistoryClicked);
-            historyContextMenu.Items.Add("Delete Activity (F3)", null, OnDeleteHistoryClicked);
+            historyContextMenu.Items.Add("Delete Activities (F3)", null, OnDeleteHistoryClicked);
             lstActivityHistory.ContextMenuStrip = historyContextMenu;
             lstActivityHistory.KeyDown += LstActivityHistory_KeyDown;
         }
@@ -367,6 +367,7 @@ namespace AdinersDailyActivityApp
             lstActivityHistory.Margin = new Padding(5);
             lstActivityHistory.DrawMode = DrawMode.OwnerDrawFixed;
             lstActivityHistory.ItemHeight = 25;
+            lstActivityHistory.SelectionMode = SelectionMode.MultiExtended;
             lstActivityHistory.DrawItem += LstActivityHistory_DrawItem;
             lstActivityHistory.MouseDoubleClick += LstActivityHistory_MouseDoubleClick;
             mainLayout.Controls.Add(lstActivityHistory, 0, 3);
@@ -798,6 +799,13 @@ namespace AdinersDailyActivityApp
 
         private void OnEditHistoryClicked(object? sender, EventArgs e)
         {
+            // Check if multiple items are selected
+            if (lstActivityHistory.SelectedItems.Count > 1)
+            {
+                ShowDarkMessageBox("Multiple selection is only supported for delete operation.\nPlease select a single activity to edit.", "Multiple Selection Not Supported");
+                return;
+            }
+            
             // If no selection, try to use the first sub-item (activity) in the list
             if (lstActivityHistory.SelectedItem == null)
             {
@@ -906,8 +914,11 @@ namespace AdinersDailyActivityApp
         
         private void OnDeleteHistoryClicked(object? sender, EventArgs e)
         {
+            // Get selected items (support multiple selection)
+            var selectedItems = lstActivityHistory.SelectedItems.Cast<object>().ToList();
+            
             // If no selection, try to use the first sub-item (activity) in the list
-            if (lstActivityHistory.SelectedItem == null)
+            if (selectedItems.Count == 0)
             {
                 // Find first sub-item (activity) in the list
                 for (int i = 0; i < lstActivityHistory.Items.Count; i++)
@@ -916,90 +927,125 @@ namespace AdinersDailyActivityApp
                     if (item.StartsWith("     ")) // This is a sub-item (activity)
                     {
                         lstActivityHistory.SelectedIndex = i;
+                        selectedItems = new List<object> { lstActivityHistory.Items[i] };
                         break;
                     }
                 }
                 
-                if (lstActivityHistory.SelectedItem == null)
+                if (selectedItems.Count == 0)
                 {
                     ShowDarkMessageBox("No activities found to delete.", "No Activities");
                     return;
                 }
             }
 
-            string selectedItem = lstActivityHistory.SelectedItem.ToString();
-            int selectedIndex = lstActivityHistory.SelectedIndex;
-            
-            // Only allow deleting sub-items (activities), not headers
-            if (!selectedItem.StartsWith("     "))
+            // Filter out headers - only allow deleting activities
+            var activitiesToDelete = new List<(string item, int index)>();
+            for (int i = 0; i < lstActivityHistory.Items.Count; i++)
             {
-                ShowDarkMessageBox("Please select an activity (not a header) to delete.", "Invalid Selection");
-                return;
-            }
-
-            // Parse sub-item to get activity details
-            int closingBracketIndex = selectedItem.IndexOf(']');
-            if (closingBracketIndex == -1) return;
-
-            string inside = selectedItem.Substring(6, closingBracketIndex - 6); // Skip "     ["
-            string[] parts = inside.Split('|');
-            if (parts.Length != 2) return;
-
-            string timesStr = parts[0].Trim();
-            string[] timeParts = timesStr.Split('-');
-            if (timeParts.Length != 2) return;
-
-            string endStr = timeParts[1].Trim();
-            string activity = selectedItem.Substring(closingBracketIndex + 1).Trim();
-
-            // Find date and type from header
-            string dateStr = "";
-            string type = "";
-            for (int i = selectedIndex - 1; i >= 0; i--)
-            {
-                string item = lstActivityHistory.Items[i].ToString();
-                if (!item.StartsWith("     ")) // Found header
+                if (selectedItems.Contains(lstActivityHistory.Items[i]))
                 {
-                    string headerWithoutIcon = item.Substring(2); // Remove icon
-                    int headerBracketIndex = headerWithoutIcon.IndexOf(']');
-                    if (headerBracketIndex != -1)
+                    string item = lstActivityHistory.Items[i].ToString();
+                    if (item.StartsWith("     ")) // This is a sub-item (activity)
                     {
-                        string headerInside = headerWithoutIcon.Substring(1, headerBracketIndex - 1);
-                        string[] headerParts = headerInside.Split('|');
-                        if (headerParts.Length == 3) // date | start-end | duration
-                        {
-                            dateStr = headerParts[0].Trim();
-                            type = headerWithoutIcon.Substring(headerBracketIndex + 1).Trim();
-                        }
+                        activitiesToDelete.Add((item, i));
                     }
-                    break;
                 }
             }
-
-            if (string.IsNullOrEmpty(dateStr)) return;
-
-            // Parse end time to create log entry
-            if (!DateTime.TryParseExact($"{dateStr} {endStr}", "dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime endTime))
+            
+            if (activitiesToDelete.Count == 0)
+            {
+                ShowDarkMessageBox("Please select activities (not headers) to delete.", "Invalid Selection");
                 return;
+            }
 
-            // Create log entry for removal - ensure exact format match
-            string logEntryToRemove = string.IsNullOrEmpty(type) ? 
-                $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {activity}" :
-                $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {type} | {activity}";
+            // Prepare log entries for removal
+            var logEntriesToRemove = new List<string>();
+            var activityNames = new List<string>();
+            
+            foreach (var (selectedItem, selectedIndex) in activitiesToDelete)
+            {
+                // Parse sub-item to get activity details
+                int closingBracketIndex = selectedItem.IndexOf(']');
+                if (closingBracketIndex == -1) continue;
+
+                string inside = selectedItem.Substring(6, closingBracketIndex - 6); // Skip "     ["
+                string[] parts = inside.Split('|');
+                if (parts.Length != 2) continue;
+
+                string timesStr = parts[0].Trim();
+                string[] timeParts = timesStr.Split('-');
+                if (timeParts.Length != 2) continue;
+
+                string endStr = timeParts[1].Trim();
+                string activity = selectedItem.Substring(closingBracketIndex + 1).Trim();
+                activityNames.Add(activity);
+
+                // Find date and type from header
+                string dateStr = "";
+                string type = "";
+                for (int i = selectedIndex - 1; i >= 0; i--)
+                {
+                    string item = lstActivityHistory.Items[i].ToString();
+                    if (!item.StartsWith("     ")) // Found header
+                    {
+                        string headerWithoutIcon = item.Substring(2); // Remove icon
+                        int headerBracketIndex = headerWithoutIcon.IndexOf(']');
+                        if (headerBracketIndex != -1)
+                        {
+                            string headerInside = headerWithoutIcon.Substring(1, headerBracketIndex - 1);
+                            string[] headerParts = headerInside.Split('|');
+                            if (headerParts.Length == 3) // date | start-end | duration
+                            {
+                                dateStr = headerParts[0].Trim();
+                                type = headerWithoutIcon.Substring(headerBracketIndex + 1).Trim();
+                            }
+                        }
+                        break;
+                    }
+                }
+
+                if (string.IsNullOrEmpty(dateStr)) continue;
+
+                // Parse end time to create log entry
+                if (!DateTime.TryParseExact($"{dateStr} {endStr}", "dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime endTime))
+                    continue;
+
+                // Create log entry for removal - ensure exact format match
+                string logEntryToRemove = string.IsNullOrEmpty(type) ? 
+                    $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {activity}" :
+                    $"[{endTime.ToString(CultureInfo.InvariantCulture)}] {type} | {activity}";
+                    
+                logEntriesToRemove.Add(logEntryToRemove);
+            }
+            
+            if (logEntriesToRemove.Count == 0) return;
 
             // Confirm deletion
-            var result = ShowDarkMessageBox($"Are you sure you want to delete this activity?\n\n{activity}\n\nThis action cannot be undone.", 
-                "Delete Activity", MessageBoxButtons.YesNo);
+            string confirmMessage = activitiesToDelete.Count == 1 ?
+                $"Are you sure you want to delete this activity?\n\n{activityNames[0]}\n\nThis action cannot be undone." :
+                $"Are you sure you want to delete these {activitiesToDelete.Count} activities?\n\n{string.Join("\n", activityNames.Take(5))}{(activityNames.Count > 5 ? "\n...and more" : "")}\n\nThis action cannot be undone.";
+                
+            var result = ShowDarkMessageBox(confirmMessage, 
+                activitiesToDelete.Count == 1 ? "Delete Activity" : "Delete Activities", 
+                MessageBoxButtons.YesNo);
             
             if (result == DialogResult.Yes)
             {
-                // Remove from log file
-                RemoveActivityFromLogFile(logEntryToRemove);
+                // Remove all entries from log file
+                foreach (string logEntry in logEntriesToRemove)
+                {
+                    RemoveActivityFromLogFile(logEntry);
+                }
                 
                 // Refresh display
                 LoadLogHistory();
                 
-                trayIcon.ShowBalloonTip(2000, "Activity Deleted", "Activity has been successfully deleted.", ToolTipIcon.Info);
+                string successMessage = activitiesToDelete.Count == 1 ?
+                    "Activity has been successfully deleted." :
+                    $"{activitiesToDelete.Count} activities have been successfully deleted.";
+                    
+                trayIcon.ShowBalloonTip(2000, "Activities Deleted", successMessage, ToolTipIcon.Info);
             }
         }
 
