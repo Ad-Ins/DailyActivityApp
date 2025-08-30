@@ -34,7 +34,8 @@ namespace AdinersDailyActivityApp.Dialogs
             this.MinimizeBox = false;
             this.BackColor = Color.FromArgb(30, 30, 30);
             this.ForeColor = Color.White;
-            this.TopMost = false; // Non-blocking
+            this.TopMost = true; // Always on top to avoid being hidden behind overlay
+            this.ShowInTaskbar = true; // Show in taskbar for visibility
 
             // Message
             lblMessage = new Label

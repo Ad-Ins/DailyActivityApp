@@ -768,13 +768,33 @@ namespace AdinersDailyActivityApp
             // Check once per day
             if ((DateTime.Now - config.LastUpdateCheck).TotalHours < 24) return;
             
+            // Wait a bit after startup to avoid conflicts with initial UI
+            await Task.Delay(5000); // Wait 5 seconds after startup
+            
             var hasUpdate = await UpdateService.CheckForUpdatesAsync();
             if (hasUpdate)
             {
                 var release = await UpdateService.GetLatestReleaseAsync();
                 if (release != null)
                 {
-                    this.Invoke(() => ShowUpdateDialog(release));
+                    this.Invoke(() => {
+                        // Double-check if overlay is visible and wait if needed
+                        if (this.Visible && this.WindowState == FormWindowState.Maximized)
+                        {
+                            // Schedule to show update dialog after a delay
+                            var delayTimer = new System.Windows.Forms.Timer();
+                            delayTimer.Interval = 3000; // Wait 3 seconds
+                            delayTimer.Tick += (s, e) => {
+                                delayTimer.Stop();
+                                ShowUpdateDialog(release);
+                            };
+                            delayTimer.Start();
+                        }
+                        else
+                        {
+                            ShowUpdateDialog(release);
+                        }
+                    });
                 }
             }
             
@@ -784,8 +804,17 @@ namespace AdinersDailyActivityApp
         
         private void ShowUpdateDialog(GitHubRelease release)
         {
+            // If fullscreen overlay is visible, hide it first
+            if (this.Visible && this.WindowState == FormWindowState.Maximized)
+            {
+                this.Hide();
+            }
+            
             var updateDialog = new UpdateDialog(release);
+            updateDialog.TopMost = true; // Ensure it's always on top
             updateDialog.Show(); // Non-blocking
+            updateDialog.BringToFront();
+            updateDialog.Activate();
         }
         
         private void ShowNoUpdateDialog()
@@ -1295,10 +1324,17 @@ namespace AdinersDailyActivityApp
                         
                         if ((end - start).TotalMinutes > 0)
                         {
-                            // Clean activity description from sync icons
+                            // Clean activity description from any display symbols
                             string cleanDescription = entry.activity;
-                            if (cleanDescription.StartsWith("⚠ ") || cleanDescription.StartsWith("✓ "))
-                                cleanDescription = cleanDescription.Substring(2);
+                            // Remove any sync icons that might have been added for display
+                            while (cleanDescription.StartsWith("⚠ ") || cleanDescription.StartsWith("✓ ") || 
+                                   cleanDescription.StartsWith("✓") || cleanDescription.StartsWith("⚠"))
+                            {
+                                if (cleanDescription.StartsWith("⚠ ") || cleanDescription.StartsWith("✓ "))
+                                    cleanDescription = cleanDescription.Substring(2);
+                                else if (cleanDescription.StartsWith("⚠") || cleanDescription.StartsWith("✓"))
+                                    cleanDescription = cleanDescription.Substring(1);
+                            }
                             
                             unsyncedActivities.Add(new UnsyncedActivity
                             {
@@ -1688,9 +1724,8 @@ namespace AdinersDailyActivityApp
                                 activity = rest.Substring(pipeIndex + 1).Trim();
                             }
                             
-                            // Add sync status to activity for display
-                            string syncIcon = isSynced ? "✓" : "⚠";
-                            activity = $"{syncIcon} {activity}";
+                            // Store sync status separately for display only
+                            // Don't modify the actual activity text
                             
                             entries.Add((time, type, activity));
                         }
@@ -1758,7 +1793,32 @@ namespace AdinersDailyActivityApp
                             {
                                 string startStr = seg.start.ToString("HH:mm", CultureInfo.InvariantCulture);
                                 string endStr = seg.end.ToString("HH:mm", CultureInfo.InvariantCulture);
-                                string sub = $"     [{startStr} - {endStr} | {FormatDuration(seg.dur)}] {seg.activity}";
+                                // Clean activity text from any existing sync icons for display
+                                string cleanActivity = seg.activity;
+                                if (cleanActivity.StartsWith("✓ ") || cleanActivity.StartsWith("⚠ "))
+                                    cleanActivity = cleanActivity.Substring(2);
+                                
+                                // Add sync icon only for display
+                                string displayActivity = cleanActivity;
+                                // Determine sync status from the original log entry
+                                bool isActivitySynced = false;
+                                string activityLogPath = GetLogFilePath();
+                                if (File.Exists(activityLogPath))
+                                {
+                                    var logLines = File.ReadAllLines(activityLogPath);
+                                    foreach (var logLine in logLines)
+                                    {
+                                        if (logLine.Contains(cleanActivity) && (logLine.Contains("[SYNCED]") || logLine.Contains("[CID:")))
+                                        {
+                                            isActivitySynced = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                string syncIcon = isActivitySynced ? "✓" : "⚠";
+                                displayActivity = $"{syncIcon} {cleanActivity}";
+                                
+                                string sub = $"     [{startStr} - {endStr} | {FormatDuration(seg.dur)}] {displayActivity}";
                                 lstActivityHistory.Items.Add(sub);
                             }
                         }
@@ -2550,10 +2610,25 @@ namespace AdinersDailyActivityApp
                 
             try
             {
-                await clockifyService.StopTimeEntryAsync(config.ClockifyWorkspaceId, currentClockifyTimeEntryId);
-                currentClockifyTimeEntryId = "";
+                var result = await clockifyService.StopTimeEntryAsync(config.ClockifyWorkspaceId, currentClockifyTimeEntryId);
+                if (result != null)
+                {
+                    // Successfully stopped
+                    currentClockifyTimeEntryId = "";
+                }
+                else
+                {
+                    // Failed to stop, but clear the ID anyway to prevent issues
+                    currentClockifyTimeEntryId = "";
+                    trayIcon.ShowBalloonTip(2000, "Clockify Warning", "Failed to stop Clockify timer. Please check manually.", ToolTipIcon.Warning);
+                }
             }
-            catch { /* Ignore Clockify errors */ }
+            catch (Exception ex)
+            {
+                // Clear the ID and show warning
+                currentClockifyTimeEntryId = "";
+                trayIcon.ShowBalloonTip(2000, "Clockify Error", $"Error stopping Clockify timer: {ex.Message}", ToolTipIcon.Warning);
+            }
         }
         
         private async void ClockifyCheckTimer_Tick(object? sender, EventArgs e)
