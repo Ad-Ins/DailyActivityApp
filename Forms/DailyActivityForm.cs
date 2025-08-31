@@ -103,6 +103,12 @@ namespace AdinersDailyActivityApp
             SetupForm();
             LoadConfig();
             InitializeClockify();
+            
+            // Initialize popup timer variables
+            this.popupTime = popupTime;
+            popupIntervalInMinutes = config.IntervalHours * 60;
+            dontShowPopupToday = config.DontShowPopupToday && config.LastDontShowDate.Date == DateTime.Today;
+            
             StartDisplayTimer();
             LoadLogHistory();
             SystemEvents.SessionEnding += SystemEvents_SessionEnding;
@@ -129,30 +135,104 @@ namespace AdinersDailyActivityApp
             displayTimer = new System.Windows.Forms.Timer();
             popupTimer = new System.Windows.Forms.Timer();
             btnStartStop = new Button();
-            // Tray menu
+            // Tray menu with organized structure
             trayMenu = new ContextMenuStrip();
             trayMenu.BackColor = Color.FromArgb(30, 30, 30);
             trayMenu.ForeColor = Color.White;
-            trayMenu.Items.Add("Input Activity Now", null, OnInputNowClicked);
-            trayMenu.Items.Add("Stop Timer", null, OnStopTimerClicked);
-            trayMenu.Items.Add("Dashboard", null, OnDashboardClicked);
-            trayMenu.Items.Add("Export Log to Excel", null, OnExportLogClicked);
-            trayMenu.Items.Add("Set Interval...", null, OnSetIntervalClicked);
-            trayMenu.Items.Add("Exclude Times...", null, OnExcludeTimesClicked);
-            trayMenu.Items.Add("Clockify Settings...", null, OnClockifySettingsClicked);
-            trayMenu.Items.Add("Timer Information", null, OnTestTimerClicked);
-            trayMenu.Items.Add("-");
-            var dontShowMenuItem = new ToolStripMenuItem("Don't show popup today");
+            
+            // === TIMER CONTROLS ===
+            var timerControlsMenu = new ToolStripMenuItem("⏱️ Timer");
+            timerControlsMenu.ToolTipText = "Timer controls and activity input";
+            
+            var inputNowItem = new ToolStripMenuItem("▶️ Start Activity", null, OnInputNowClicked);
+            inputNowItem.ToolTipText = "Start timer with new activity (Double-click tray icon)";
+            timerControlsMenu.DropDownItems.Add(inputNowItem);
+            
+            var stopTimerItem = new ToolStripMenuItem("⏹️ Stop Timer", null, OnStopTimerClicked);
+            stopTimerItem.ToolTipText = "Stop current running timer";
+            timerControlsMenu.DropDownItems.Add(stopTimerItem);
+            
+            timerControlsMenu.DropDownItems.Add("-");
+            
+            var timerInfoItem = new ToolStripMenuItem("ℹ️ Timer Status", null, OnTestTimerClicked);
+            timerInfoItem.ToolTipText = "View detailed timer information and debug status";
+            timerControlsMenu.DropDownItems.Add(timerInfoItem);
+            
+            trayMenu.Items.Add(timerControlsMenu);
+            
+            // === DATA & REPORTS ===
+            var dataMenu = new ToolStripMenuItem("📊 Data & Reports");
+            dataMenu.ToolTipText = "View data, export reports, and dashboard";
+            
+            var dashboardItem = new ToolStripMenuItem("📈 Dashboard", null, OnDashboardClicked);
+            dashboardItem.ToolTipText = "View activity dashboard and statistics";
+            dataMenu.DropDownItems.Add(dashboardItem);
+            
+            var exportItem = new ToolStripMenuItem("📋 Export to Excel", null, OnExportLogClicked);
+            exportItem.ToolTipText = "Export activity log to Excel with detailed reports";
+            dataMenu.DropDownItems.Add(exportItem);
+            
+            trayMenu.Items.Add(dataMenu);
+            
+            // === SETTINGS ===
+            var settingsMenu = new ToolStripMenuItem("⚙️ Settings");
+            settingsMenu.ToolTipText = "Configure application settings";
+            
+            var intervalItem = new ToolStripMenuItem("⏰ Reminder Interval", null, OnSetIntervalClicked);
+            intervalItem.ToolTipText = "Set popup reminder interval (legacy feature)";
+            settingsMenu.DropDownItems.Add(intervalItem);
+            
+            var excludeTimesItem = new ToolStripMenuItem("☕ Break Times", null, OnExcludeTimesClicked);
+            excludeTimesItem.ToolTipText = "Configure break periods (lunch, coffee) that auto-pause timer";
+            settingsMenu.DropDownItems.Add(excludeTimesItem);
+            
+            var clockifyItem = new ToolStripMenuItem("🔗 Clockify Integration", null, OnClockifySettingsClicked);
+            clockifyItem.ToolTipText = "Configure Clockify API connection and sync settings";
+            settingsMenu.DropDownItems.Add(clockifyItem);
+            
+            settingsMenu.DropDownItems.Add("-");
+            
+            var dontShowMenuItem = new ToolStripMenuItem("🔕 Disable Popups Today");
             dontShowMenuItem.CheckOnClick = true;
             dontShowMenuItem.Checked = config?.DontShowPopupToday ?? false;
             dontShowMenuItem.Click += OnDontShowTodayClicked;
-            trayMenu.Items.Add(dontShowMenuItem);
+            dontShowMenuItem.ToolTipText = "Temporarily disable popup reminders for today only";
+            settingsMenu.DropDownItems.Add(dontShowMenuItem);
+            
+            trayMenu.Items.Add(settingsMenu);
+            
             trayMenu.Items.Add("-");
-            trayMenu.Items.Add("Check for Updates", null, OnCheckUpdatesClicked);
-            // trayMenu.Items.Add("Clear History", null, OnClearHistoryClicked); // Temporarily hidden
+            
+            // === HELP & UPDATES ===
+            var helpMenu = new ToolStripMenuItem("❓ Help");
+            helpMenu.ToolTipText = "Get help and information about the application";
+            
+            var shortcutsItem = new ToolStripMenuItem("⌨️ Keyboard Shortcuts", null, OnShowShortcutsClicked);
+            shortcutsItem.ToolTipText = "View all available keyboard shortcuts and hotkeys";
+            helpMenu.DropDownItems.Add(shortcutsItem);
+            
+            var featuresItem = new ToolStripMenuItem("✨ Features Guide", null, OnShowFeaturesClicked);
+            featuresItem.ToolTipText = "Learn about all available features and how to use them";
+            helpMenu.DropDownItems.Add(featuresItem);
+            
+            helpMenu.DropDownItems.Add("-");
+            
+            var updatesItem = new ToolStripMenuItem("🔄 Check for Updates", null, OnCheckUpdatesClicked);
+            updatesItem.ToolTipText = "Check for application updates and download latest version";
+            helpMenu.DropDownItems.Add(updatesItem);
+            
+            var aboutItem = new ToolStripMenuItem("ℹ️ About", null, OnAboutClicked);
+            aboutItem.ToolTipText = "View application information, version, and credits";
+            helpMenu.DropDownItems.Add(aboutItem);
+            
+            trayMenu.Items.Add(helpMenu);
+            
             trayMenu.Items.Add("-");
-            trayMenu.Items.Add("About", null, OnAboutClicked);
-            trayMenu.Items.Add("Exit", null, OnExitClicked);
+            
+            // === EXIT ===
+            var exitItem = new ToolStripMenuItem("🚪 Exit", null, OnExitClicked);
+            exitItem.ToolTipText = "Close the application completely";
+            trayMenu.Items.Add(exitItem);
 
             string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "logo.ico");
             Icon trayAppIcon;
@@ -521,11 +601,6 @@ namespace AdinersDailyActivityApp
 
         private void OnInputNowClicked(object? sender, EventArgs e)
         {
-            if ((DateTime.Now - lastActivityInputTime).TotalSeconds < 60 && lastActivityInputTime != DateTime.MinValue)
-            {
-                trayIcon.ShowBalloonTip(2000, "Cooldown", "Harus menunggu minimal 1 menit sebelum input activity baru.", ToolTipIcon.Info);
-                return;
-            }
             ShowFullScreenInput();
         }
         
@@ -570,7 +645,15 @@ namespace AdinersDailyActivityApp
                     if (config.IntervalHours < 1) config.IntervalHours = 1; // Minimum 1 hour
                     config.Save();
                     LoadConfig();
-                    StartDisplayTimer(); // refresh interval
+                    
+                    // Update popup timer with new interval
+                    popupIntervalInMinutes = config.IntervalHours * 60;
+                    popupTimer.Stop();
+                    popupTimer.Interval = popupIntervalInMinutes * 60 * 1000;
+                    popupTimer.Start();
+                    
+                    trayIcon.ShowBalloonTip(2000, "Interval Updated", 
+                        $"Reminder interval set to {config.IntervalHours} hour(s)", ToolTipIcon.Info);
                 }
             }
         }
@@ -857,12 +940,190 @@ namespace AdinersDailyActivityApp
             noUpdateForm.Show();
         }
         
+        private void OnShowShortcutsClicked(object? sender, EventArgs e)
+        {
+            Form shortcutsForm = new Form
+            {
+                Width = 540,
+                Height = 500,
+                Text = "Keyboard Shortcuts & Hotkeys",
+                StartPosition = FormStartPosition.CenterScreen,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false,
+                MinimizeBox = false,
+                BackColor = Color.FromArgb(30, 30, 30),
+                ForeColor = Color.White
+            };
+            
+            Label titleLabel = new Label
+            {
+                Text = "⌨️ Keyboard Shortcuts & Hotkeys",
+                Location = new Point(20, 20),
+                Size = new Size(480, 30),
+                ForeColor = Color.FromArgb(100, 200, 255),
+                Font = new Font("Segoe UI", 14, FontStyle.Bold)
+            };
+            
+            // Create scrollable panel for content
+            Panel scrollPanel = new Panel
+            {
+                Location = new Point(20, 60),
+                Size = new Size(480, 380),
+                BackColor = Color.FromArgb(35, 35, 35),
+                AutoScroll = true,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+            
+            Label shortcutsLabel = new Label
+            {
+                Text = "🎯 ACTIVITY MANAGEMENT\n" +
+                       "   Enter          - Start timer with current activity\n" +
+                       "   Escape         - Hide fullscreen overlay\n" +
+                       "   F2             - Edit selected activity in history\n" +
+                       "   F3             - Delete selected activity (with confirmation)\n" +
+                       "   F4             - Sync selected activity to Clockify\n\n" +
+                       "🖱️ MOUSE ACTIONS\n" +
+                       "   Double-click tray icon    - Open activity input overlay\n" +
+                       "   Right-click tray icon     - Show organized context menu\n" +
+                       "   Right-click history item  - Show edit/delete menu\n" +
+                       "   Double-click history item - Auto-fill activity details\n" +
+                       "   Double-click header       - Expand/collapse group\n\n" +
+                       "⏱️ TIMER CONTROLS\n" +
+                       "   START/STOP button         - Toggle timer state\n" +
+                       "   Tray menu > Timer         - Access timer controls\n" +
+                       "   Auto-pause during breaks  - Configured exclude times\n" +
+                       "   Auto-split at midnight    - Accurate daily tracking\n\n" +
+                       "🔗 CLOCKIFY INTEGRATION\n" +
+                       "   Auto-sync on timer stop   - If Clockify configured\n" +
+                       "   Manual sync via F4        - Sync individual activities\n" +
+                       "   Bulk sync via menu        - Sync all unsynced activities\n\n" +
+                       "📊 DATA & REPORTS\n" +
+                       "   Tray menu > Export         - Excel export with date range\n" +
+                       "   Tray menu > Dashboard      - View activity statistics\n\n" +
+                       "⚙️ SETTINGS ACCESS\n" +
+                       "   Tray menu > Settings       - All configuration options\n" +
+                       "   Break Times               - Configure auto-pause periods\n" +
+                       "   Clockify Integration      - API and sync settings\n\n" +
+                       "💡 PRO TIPS\n" +
+                       "   • Timer runs continuously in system tray\n" +
+                       "   • Real-time elapsed time display in tray text\n" +
+                       "   • Activities auto-save when timer stops\n" +
+                       "   • Use activity type dropdown for consistency\n" +
+                       "   • History groups by date and type for easy review\n" +
+                       "   • Sync status indicators show Clockify integration\n" +
+                       "   • Multiple selection supported for bulk delete",
+                Location = new Point(10, 10),
+                Size = new Size(440, 700), // Larger height for scrolling
+                ForeColor = Color.White,
+                Font = new Font("Consolas", 9),
+                AutoSize = false
+            };
+            
+            scrollPanel.Controls.Add(shortcutsLabel);
+            
+            shortcutsForm.Controls.AddRange(new Control[] { titleLabel, scrollPanel });
+            
+            // Adjust scroll panel to fill remaining space
+            scrollPanel.Size = new Size(480, 420);
+            shortcutsForm.ShowDialog();
+        }
+        
+        private void OnShowFeaturesClicked(object? sender, EventArgs e)
+        {
+            Form featuresForm = new Form
+            {
+                Width = 580,
+                Height = 550,
+                Text = "Features Guide",
+                StartPosition = FormStartPosition.CenterScreen,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false,
+                MinimizeBox = false,
+                BackColor = Color.FromArgb(30, 30, 30),
+                ForeColor = Color.White
+            };
+            
+            Label titleLabel = new Label
+            {
+                Text = "✨ Features Guide",
+                Location = new Point(20, 20),
+                Size = new Size(520, 30),
+                ForeColor = Color.FromArgb(100, 200, 255),
+                Font = new Font("Segoe UI", 14, FontStyle.Bold)
+            };
+            
+            // Create scrollable panel for content
+            Panel scrollPanel = new Panel
+            {
+                Location = new Point(20, 60),
+                Size = new Size(520, 430),
+                BackColor = Color.FromArgb(35, 35, 35),
+                AutoScroll = true,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+            
+            Label featuresLabel = new Label
+            {
+                Text = "⏱️ CLOCKIFY-STYLE TIMER\n" +
+                       "   • Manual START/STOP button like Clockify\n" +
+                       "   • Real-time elapsed time in tray icon\n" +
+                       "   • Enter key to start timer quickly\n" +
+                       "   • Timer continues across app restarts\n\n" +
+                       "🌙 AUTOMATIC MIDNIGHT SPLITTING\n" +
+                       "   • Activities crossing midnight auto-split\n" +
+                       "   • Accurate daily tracking guaranteed\n" +
+                       "   • No manual intervention required\n\n" +
+                       "☕ EXCLUDE TIME PERIODS\n" +
+                       "   • Configure lunch/coffee breaks\n" +
+                       "   • Timer auto-pauses and resumes\n" +
+                       "   • Default: 12:00-13:00 lunch break\n" +
+                       "   • Multiple break periods supported\n\n" +
+                       "✏️ ON-THE-FLY EDITING\n" +
+                       "   • Edit activity times with F2 key\n" +
+                       "   • Delete incorrect activities with F3\n" +
+                       "   • Right-click context menu support\n" +
+                       "   • Bulk operations for multiple activities\n\n" +
+                       "📊 SMART REPORTING\n" +
+                       "   • Excel export with 3 detailed sheets\n" +
+                       "   • Overtime detection (weekends + after 8PM)\n" +
+                       "   • Activity type management and history\n" +
+                       "   • Date range filtering for exports\n\n" +
+                       "🔗 CLOCKIFY INTEGRATION\n" +
+                       "   • Sync activities to Clockify automatically\n" +
+                       "   • Auto-create tasks and projects\n" +
+                       "   • Bi-directional sync support\n" +
+                       "   • Real-time sync status indicators\n\n" +
+                       "🔄 AUTO-UPDATE SYSTEM\n" +
+                       "   • Automatic update notifications\n" +
+                       "   • One-click update downloads\n" +
+                       "   • GitHub releases integration\n\n" +
+                       "📱 SYSTEM INTEGRATION\n" +
+                       "   • System tray operation\n" +
+                       "   • Windows startup integration\n" +
+                       "   • Session end detection\n" +
+                       "   • Dark mode UI throughout",
+                Location = new Point(10, 10),
+                Size = new Size(480, 800), // Larger height for scrolling
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9),
+                AutoSize = false
+            };
+            
+            scrollPanel.Controls.Add(featuresLabel);
+            
+            featuresForm.Controls.AddRange(new Control[] { titleLabel, scrollPanel });
+            
+            // Adjust scroll panel to fill remaining space
+            scrollPanel.Size = new Size(520, 470);
+            featuresForm.ShowDialog();
+        }
+
         private void OnAboutClicked(object? sender, EventArgs e)
         {
             Form aboutForm = new Form
             {
-                Width = 480,
-                Height = 420,
+                Width = 520,
+                Height = 480,
                 Text = "About Daily Activity App",
                 StartPosition = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedDialog,
@@ -876,7 +1137,7 @@ namespace AdinersDailyActivityApp
             {
                 Text = "Daily Activity Tracker",
                 Location = new Point(20, 20),
-                Size = new Size(420, 30),
+                Size = new Size(460, 30),
                 ForeColor = Color.FromArgb(100, 200, 255),
                 Font = new Font("Segoe UI", 16, FontStyle.Bold)
             };
@@ -885,57 +1146,72 @@ namespace AdinersDailyActivityApp
             {
                 Text = $"Version {UpdateService.CurrentVersion}",
                 Location = new Point(20, 55),
-                Size = new Size(420, 20),
+                Size = new Size(460, 20),
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 10)
             };
             
-            Label descriptionLabel = new Label
+            // Create scrollable panel for content
+            Panel scrollPanel = new Panel
             {
-                Text = "A comprehensive activity tracking application designed to help\n" +
+                Location = new Point(20, 85),
+                Size = new Size(460, 340),
+                BackColor = Color.FromArgb(35, 35, 35),
+                AutoScroll = true,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+            
+            Label contentLabel = new Label
+            {
+                Text = "📝 DESCRIPTION\n" +
+                       "A comprehensive activity tracking application designed to help\n" +
                        "professionals monitor and manage their daily work activities.\n\n" +
                        "Never miss tracking your activities again! This tool provides\n" +
                        "automatic reminders, detailed logging, and comprehensive\n" +
-                       "reporting to ensure all your work is properly documented.",
-                Location = new Point(20, 85),
-                Size = new Size(420, 120),
+                       "reporting to ensure all your work is properly documented.\n\n" +
+                       "✨ KEY FEATURES\n" +
+                       "• Clockify-style manual timer with START/STOP button\n" +
+                       "• Automatic midnight activity splitting for accurate tracking\n" +
+                       "• Exclude time periods (lunch, coffee breaks) with auto-pause\n" +
+                       "• On-the-fly activity editing with F2 key\n" +
+                       "• Delete activities with F3 key and confirmation\n" +
+                       "• Smart activity type management with history\n" +
+                       "• Excel export with 3 detailed sheets (Log, Summary, Overtime)\n" +
+                       "• Overtime detection for weekends and after-hours work\n" +
+                       "• Clockify integration with bi-directional sync\n" +
+                       "• Auto-update system with GitHub releases\n" +
+                       "• Dark mode UI with modern design\n" +
+                       "• System tray operation with real-time timer display\n\n" +
+                       "🛠️ TECHNICAL DETAILS\n" +
+                       "• Built with .NET 6 Windows Forms\n" +
+                       "• Self-contained executable (no .NET runtime required)\n" +
+                       "• Professional Windows installer with Inno Setup\n" +
+                       "• Automatic startup integration\n" +
+                       "• Session end detection for timer safety\n" +
+                       "• JSON configuration with backward compatibility\n\n" +
+                       "🏢 COMPANY INFORMATION\n" +
+                       "© 2024 AdIns (Advance Innovations)\n" +
+                       "PT. Adicipta Inovasi Teknologi\n" +
+                       "Developed by LJP\n\n" +
+                       "📞 SUPPORT & UPDATES\n" +
+                       "• Automatic update notifications\n" +
+                       "• GitHub repository for issues and feedback\n" +
+                       "• Comprehensive help system with shortcuts guide\n" +
+                       "• Features guide with detailed explanations",
+                Location = new Point(10, 10),
+                Size = new Size(420, 800), // Larger height for scrolling
                 ForeColor = Color.White,
-                Font = new Font("Segoe UI", 10)
-            };
-            
-            Label featuresLabel = new Label
-            {
-                Text = "Key Features:\n" +
-                       "• Manual timer with START/STOP button\n" +
-                       "• Automatic midnight activity splitting\n" +
-                       "• Exclude time periods (lunch, breaks)\n" +
-                       "• On-the-fly activity editing (F2)\n" +
-                       "• Delete activities with F3 key\n" +
-                       "• Smart activity type management\n" +
-                       "• Excel export with detailed reports\n" +
-                       "• Overtime tracking and analysis\n" +
-                       "• Auto-update system",
-                Location = new Point(20, 210),
-                Size = new Size(200, 140),
-                ForeColor = Color.FromArgb(200, 200, 200),
-                Font = new Font("Segoe UI", 9)
-            };
-            
-            Label copyrightLabel = new Label
-            {
-                Text = "© 2024 AdIns (Advance Innovations) - PT. Adicipta Inovasi Teknologi\nDeveloped by LJP",
-                Location = new Point(240, 330),
-                Size = new Size(200, 40),
-                ForeColor = Color.FromArgb(150, 150, 150),
                 Font = new Font("Segoe UI", 9),
-                TextAlign = ContentAlignment.TopRight
+                AutoSize = false
             };
+            
+            scrollPanel.Controls.Add(contentLabel);
             
             Button btnClose = new Button
             {
                 Text = "Close",
                 Size = new Size(80, 30),
-                Location = new Point(380, 370),
+                Location = new Point(420, 435),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(50, 50, 50),
                 ForeColor = Color.White,
@@ -944,8 +1220,7 @@ namespace AdinersDailyActivityApp
             btnClose.FlatAppearance.BorderSize = 0;
             
             aboutForm.Controls.AddRange(new Control[] { 
-                titleLabel, versionLabel, descriptionLabel, featuresLabel, 
-                copyrightLabel, btnClose 
+                titleLabel, versionLabel, scrollPanel, btnClose 
             });
             
             aboutForm.ShowDialog();
@@ -1415,14 +1690,133 @@ namespace AdinersDailyActivityApp
         #endregion
 
         #region Methods
-        private async void ShowFullScreenInput()
+        private void ShowIntervalPopup()
         {
-            if ((DateTime.Now - lastActivityInputTime).TotalSeconds < 60 && lastActivityInputTime != DateTime.MinValue)
+            Form intervalForm = new Form
             {
-                this.Hide();
-                return;
+                Width = 500,
+                Height = isTimerRunning ? 280 : 220,
+                Text = "Activity Reminder",
+                StartPosition = FormStartPosition.CenterScreen,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false,
+                MinimizeBox = false,
+                BackColor = Color.FromArgb(30, 30, 30),
+                ForeColor = Color.White,
+                TopMost = true
+            };
+            
+            Label titleLabel = new Label
+            {
+                Text = "⏰ Activity Reminder",
+                Location = new Point(20, 20),
+                Size = new Size(440, 30),
+                ForeColor = Color.FromArgb(100, 200, 255),
+                Font = new Font("Segoe UI", 14, FontStyle.Bold)
+            };
+            
+            string statusMessage;
+            if (isTimerRunning)
+            {
+                var elapsed = DateTime.Now - timerStartTime;
+                string elapsedStr = $"{(int)elapsed.TotalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
+                statusMessage = $"⏱️ Timer is currently running\n\n" +
+                               $"Activity: {currentActivityDescription}\n" +
+                               $"Type: {(string.IsNullOrEmpty(currentActivityType) ? "General" : currentActivityType)}\n" +
+                               $"Elapsed Time: {elapsedStr}\n" +
+                               $"Started: {timerStartTime:HH:mm}\n\n" +
+                               $"Would you like to continue or start a new activity?";
+            }
+            else if (isTimerPausedForExclude)
+            {
+                statusMessage = $"☕ Timer is paused for break time\n\n" +
+                               $"Paused Activity: {pausedActivityDescription}\n" +
+                               $"Type: {(string.IsNullOrEmpty(pausedActivityType) ? "General" : pausedActivityType)}\n\n" +
+                               $"Timer will resume automatically after break.\n" +
+                               $"Would you like to start a different activity?";
+            }
+            else
+            {
+                statusMessage = $"💤 No timer is currently running\n\n" +
+                               $"It's time to track your activity!\n" +
+                               $"What are you working on right now?";
             }
             
+            Label messageLabel = new Label
+            {
+                Text = statusMessage,
+                Location = new Point(20, 60),
+                Size = new Size(440, isTimerRunning ? 140 : 100),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10)
+            };
+            
+            // Buttons
+            int buttonY = isTimerRunning ? 210 : 170;
+            
+            Button inputButton = new Button
+            {
+                Text = isTimerRunning ? "New Activity" : "Start Timer",
+                Size = new Size(120, 35),
+                Location = new Point(150, buttonY),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(0, 120, 215),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10, FontStyle.Bold)
+            };
+            inputButton.FlatAppearance.BorderSize = 0;
+            inputButton.Click += (s, e) => {
+                intervalForm.Close();
+                ShowFullScreenInput();
+            };
+            
+            Button continueButton = new Button
+            {
+                Text = "Continue",
+                Size = new Size(100, 35),
+                Location = new Point(280, buttonY),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(50, 50, 50),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10)
+            };
+            continueButton.FlatAppearance.BorderSize = 0;
+            continueButton.Click += (s, e) => intervalForm.Close();
+            
+            Button snoozeButton = new Button
+            {
+                Text = "Snooze 15m",
+                Size = new Size(100, 35),
+                Location = new Point(390, buttonY),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(70, 70, 70),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9)
+            };
+            snoozeButton.FlatAppearance.BorderSize = 0;
+            snoozeButton.Click += (s, e) => {
+                // Snooze for 15 minutes
+                popupTimer.Stop();
+                popupTimer.Interval = 15 * 60 * 1000; // 15 minutes
+                popupTimer.Start();
+                intervalForm.Close();
+                trayIcon.ShowBalloonTip(2000, "Reminder Snoozed", "Next reminder in 15 minutes", ToolTipIcon.Info);
+            };
+            
+            intervalForm.Controls.AddRange(new Control[] { 
+                titleLabel, messageLabel, inputButton, continueButton, snoozeButton 
+            });
+            
+            intervalForm.ShowDialog();
+            
+            // Reset popup timer to normal interval after dialog closes
+            popupTimer.Stop();
+            popupTimer.Interval = popupIntervalInMinutes * 60 * 1000;
+            popupTimer.Start();
+        }
+        
+        private async void ShowFullScreenInput()
+        {
             // Refresh dropdown items from all sources
             cmbType.Items.Clear();
             var uniqueTypes = await GetUniqueTypesFromAllSourcesAsync();
@@ -2133,6 +2527,14 @@ namespace AdinersDailyActivityApp
             displayTimer.Tick += DisplayTimer_Tick;
             displayTimer.Start();
             
+            // Initialize popup interval timer
+            popupTimer.Stop();
+            popupIntervalInMinutes = config.IntervalHours * 60;
+            popupTimer.Interval = popupIntervalInMinutes * 60 * 1000; // Convert to milliseconds
+            popupTimer.Tick -= PopupTimer_Tick;
+            popupTimer.Tick += PopupTimer_Tick;
+            popupTimer.Start();
+            
             // Initialize Clockify check timer
             clockifyCheckTimer = new Timer();
             clockifyCheckTimer.Interval = 10000; // Check every 10 seconds
@@ -2174,6 +2576,15 @@ namespace AdinersDailyActivityApp
             }
             
             UpdateTrayIcon();
+        }
+        
+        private void PopupTimer_Tick(object? sender, EventArgs e)
+        {
+            // Skip if popups are disabled for today
+            if (dontShowPopupToday) return;
+            
+            // Show interval popup regardless of timer state
+            ShowIntervalPopup();
         }
         
         private void OnExcludeTimesClicked(object? sender, EventArgs e)
@@ -2374,9 +2785,13 @@ namespace AdinersDailyActivityApp
         
         private void UpdateTrayIcon()
         {
-            // Update Stop Timer menu visibility
-            var stopTimerItem = trayMenu.Items[1]; // Stop Timer is at index 1
-            stopTimerItem.Visible = isTimerRunning || isTimerPausedForExclude;
+            // Update Stop Timer menu visibility in Timer submenu
+            var timerMenu = trayMenu.Items[0] as ToolStripMenuItem; // Timer menu is first
+            if (timerMenu != null && timerMenu.DropDownItems.Count > 1)
+            {
+                var stopTimerItem = timerMenu.DropDownItems[1]; // Stop Timer is second in submenu
+                stopTimerItem.Visible = isTimerRunning || isTimerPausedForExclude;
+            }
             
             // Update Dashboard menu visibility based on Clockify connection
             UpdateDashboardMenuVisibility();
@@ -2981,29 +3396,27 @@ namespace AdinersDailyActivityApp
         
         private void UpdateDashboardMenuVisibility()
         {
-            // Find existing dashboard menu item
-            ToolStripMenuItem dashboardItem = null;
-            foreach (ToolStripItem item in trayMenu.Items)
+            // Find Data & Reports menu (index 1)
+            var dataMenu = trayMenu.Items[1] as ToolStripMenuItem;
+            if (dataMenu != null && dataMenu.DropDownItems.Count > 0)
             {
-                if (item.Text == "Dashboard")
+                // Dashboard is first item in Data & Reports submenu
+                var dashboardItem = dataMenu.DropDownItems[0];
+                bool shouldShowDashboard = IsClockifyConnected();
+                dashboardItem.Visible = shouldShowDashboard;
+                
+                // Update tooltip based on connection status
+                if (dashboardItem is ToolStripMenuItem menuItem)
                 {
-                    dashboardItem = item as ToolStripMenuItem;
-                    break;
+                    if (shouldShowDashboard)
+                    {
+                        menuItem.ToolTipText = "View activity dashboard and statistics";
+                    }
+                    else
+                    {
+                        menuItem.ToolTipText = "Dashboard requires Clockify connection (configure in Settings)";
+                    }
                 }
-            }
-            
-            bool shouldShowDashboard = IsClockifyConnected();
-            
-            if (shouldShowDashboard && dashboardItem == null)
-            {
-                // Add dashboard menu after Stop Timer (index 2)
-                var newDashboardItem = new ToolStripMenuItem("Dashboard", null, OnDashboardClicked);
-                trayMenu.Items.Insert(2, newDashboardItem);
-            }
-            else if (!shouldShowDashboard && dashboardItem != null)
-            {
-                // Remove dashboard menu
-                trayMenu.Items.Remove(dashboardItem);
             }
         }
         
