@@ -1694,8 +1694,8 @@ namespace AdinersDailyActivityApp
         {
             Form intervalForm = new Form
             {
-                Width = 500,
-                Height = isTimerRunning ? 280 : 220,
+                Width = 650,
+                Height = isTimerRunning ? 380 : 320,
                 Text = "Activity Reminder",
                 StartPosition = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedDialog,
@@ -1710,9 +1710,10 @@ namespace AdinersDailyActivityApp
             {
                 Text = "⏰ Activity Reminder",
                 Location = new Point(20, 20),
-                Size = new Size(440, 30),
+                Size = new Size(590, 40),
                 ForeColor = Color.FromArgb(100, 200, 255),
-                Font = new Font("Segoe UI", 14, FontStyle.Bold)
+                Font = new Font("Segoe UI", 18, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleCenter
             };
             
             string statusMessage;
@@ -1745,24 +1746,25 @@ namespace AdinersDailyActivityApp
             Label messageLabel = new Label
             {
                 Text = statusMessage,
-                Location = new Point(20, 60),
-                Size = new Size(440, isTimerRunning ? 140 : 100),
+                Location = new Point(20, 80),
+                Size = new Size(590, isTimerRunning ? 180 : 140),
                 ForeColor = Color.White,
-                Font = new Font("Segoe UI", 10)
+                Font = new Font("Segoe UI", 12),
+                TextAlign = ContentAlignment.TopLeft
             };
             
             // Buttons
-            int buttonY = isTimerRunning ? 210 : 170;
+            int buttonY = isTimerRunning ? 280 : 240;
             
             Button inputButton = new Button
             {
                 Text = isTimerRunning ? "New Activity" : "Start Timer",
-                Size = new Size(120, 35),
-                Location = new Point(150, buttonY),
+                Size = new Size(140, 45),
+                Location = new Point(180, buttonY),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(0, 120, 215),
                 ForeColor = Color.White,
-                Font = new Font("Segoe UI", 10, FontStyle.Bold)
+                Font = new Font("Segoe UI", 12, FontStyle.Bold)
             };
             inputButton.FlatAppearance.BorderSize = 0;
             inputButton.Click += (s, e) => {
@@ -1773,12 +1775,12 @@ namespace AdinersDailyActivityApp
             Button continueButton = new Button
             {
                 Text = "Continue",
-                Size = new Size(100, 35),
-                Location = new Point(280, buttonY),
+                Size = new Size(120, 45),
+                Location = new Point(330, buttonY),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(50, 50, 50),
                 ForeColor = Color.White,
-                Font = new Font("Segoe UI", 10)
+                Font = new Font("Segoe UI", 12)
             };
             continueButton.FlatAppearance.BorderSize = 0;
             continueButton.Click += (s, e) => intervalForm.Close();
@@ -1786,12 +1788,12 @@ namespace AdinersDailyActivityApp
             Button snoozeButton = new Button
             {
                 Text = "Snooze 15m",
-                Size = new Size(100, 35),
-                Location = new Point(390, buttonY),
+                Size = new Size(120, 45),
+                Location = new Point(460, buttonY),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(70, 70, 70),
                 ForeColor = Color.White,
-                Font = new Font("Segoe UI", 9)
+                Font = new Font("Segoe UI", 11)
             };
             snoozeButton.FlatAppearance.BorderSize = 0;
             snoozeButton.Click += (s, e) => {
