@@ -24,7 +24,6 @@ SolidCompression=yes
 DisableProgramGroupPage=no
 UninstallDisplayIcon={app}\AdinersDailyActivityApp.exe
 PrivilegesRequired=lowest
-SignTool=bypassed
 
 
 [Files]
