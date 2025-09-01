@@ -1584,17 +1584,17 @@ namespace AdinersDailyActivityApp
                 foreach (var typeGroup in typeGroups)
                 {
                     var typeEntries = typeGroup.ToList();
-                    DateTime? prevTime = new DateTime(dateGroup.Key.Year, dateGroup.Key.Month, dateGroup.Key.Day, 8, 0, 0);
+                    DateTime? prevTime = null;
                     
-                    if (typeEntries.First().timestamp < prevTime.Value)
+                    // Use actual first entry time as starting point
+                    if (typeEntries.Count > 0)
                     {
                         prevTime = typeEntries.First().timestamp;
                     }
                     
                     foreach (var entry in typeEntries)
                     {
-                        DateTime start = prevTime.Value;
-                        if (start > entry.timestamp) start = entry.timestamp;
+                        DateTime start = prevTime ?? entry.timestamp;
                         DateTime end = entry.timestamp;
                         
                         if ((end - start).TotalMinutes > 0)
@@ -2147,16 +2147,17 @@ namespace AdinersDailyActivityApp
 
                         // Calculate segments for this type
                         var segments = new List<(DateTime start, DateTime end, int dur, string activity)>();
-                        DateTime? prevTime = new DateTime(date.Year, date.Month, date.Day, 8, 0, 0);
-                        if (typeEntries.First().time < prevTime.Value)
+                        DateTime? prevTime = null;
+                        
+                        // Use actual first entry time as starting point, not fixed 8:00 AM
+                        if (typeEntries.Count > 0)
                         {
                             prevTime = typeEntries.First().time;
                         }
 
                         foreach (var entry in typeEntries)
                         {
-                            DateTime start = prevTime.Value;
-                            if (start > entry.time) start = entry.time;
+                            DateTime start = prevTime ?? entry.time;
                             DateTime end = entry.time;
                             int dur = (int)(end - start).TotalMinutes;
                             if (dur < 0) dur = 0;
@@ -2348,16 +2349,17 @@ namespace AdinersDailyActivityApp
                         var typeEntries = typeGroup.ToList();
                         
                         // Calculate segments for this type (same logic as LoadLogHistory)
-                        DateTime? prevTime = new DateTime(date.Year, date.Month, date.Day, 8, 0, 0);
-                        if (typeEntries.First().timestamp < prevTime.Value)
+                        DateTime? prevTime = null;
+                        
+                        // Use actual first entry time as starting point
+                        if (typeEntries.Count > 0)
                         {
                             prevTime = typeEntries.First().timestamp;
                         }
                         
                         foreach (var entry in typeEntries)
                         {
-                            DateTime start = prevTime.Value;
-                            if (start > entry.timestamp) start = entry.timestamp;
+                            DateTime start = prevTime ?? entry.timestamp;
                             DateTime end = entry.timestamp;
                             int duration = (int)(end - start).TotalMinutes;
                             if (duration < 0) duration = 0;

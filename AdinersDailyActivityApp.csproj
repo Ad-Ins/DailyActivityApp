@@ -6,9 +6,9 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>disable</ImplicitUsings>
-    <Version>3.1.2</Version>
-    <AssemblyVersion>3.1.2.0</AssemblyVersion>
-    <FileVersion>3.1.2.0</FileVersion>
+    <Version>3.1.3</Version>
+    <AssemblyVersion>3.1.3.0</AssemblyVersion>
+    <FileVersion>3.1.3.0</FileVersion>
     <ApplicationIcon>Assets\logo.ico</ApplicationIcon>
     <Product>Daily Activity App</Product>
     <Company>PT. Adicipta Inovasi Teknologi</Company>
