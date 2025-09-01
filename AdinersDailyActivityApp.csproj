@@ -6,13 +6,17 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>disable</ImplicitUsings>
-    <Version>3.1.1</Version>
-    <AssemblyVersion>3.1.1.0</AssemblyVersion>
-    <FileVersion>3.1.1.0</FileVersion>
+    <Version>3.1.2</Version>
+    <AssemblyVersion>3.1.2.0</AssemblyVersion>
+    <FileVersion>3.1.2.0</FileVersion>
     <ApplicationIcon>Assets\logo.ico</ApplicationIcon>
     <Product>Daily Activity App</Product>
-    <Company>AdIns (Advance Innovations) - PT. Adicipta Inovasi Teknologi</Company>
-    <Copyright>Copyright © AdIns (Advance Innovations) - PT. Adicipta Inovasi Teknologi 2024</Copyright>
+    <Company>PT. Adicipta Inovasi Teknologi</Company>
+    <Copyright>Copyright © PT. Adicipta Inovasi Teknologi 2024</Copyright>
+    <AssemblyCompany>PT. Adicipta Inovasi Teknologi</AssemblyCompany>
+    <AssemblyProduct>Adiners Daily Activity</AssemblyProduct>
+    <AssemblyDescription>Daily Activity Tracking Application</AssemblyDescription>
+    <AssemblyCopyright>Copyright © PT. Adicipta Inovasi Teknologi 2024</AssemblyCopyright>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>

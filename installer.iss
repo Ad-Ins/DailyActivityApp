@@ -2,10 +2,18 @@
 [Setup]
 AppName=Adiners Daily Activity
 AppVersion={#GetVersionNumbersString("publish\AdinersDailyActivityApp.exe")}
-AppPublisher=AdIns (Advance Innovations) - PT. Adicipta Inovasi Teknologi
+AppPublisher=PT. Adicipta Inovasi Teknologi (AdIns)
 AppPublisherURL=https://github.com/Ad-Ins/DailyActivityApp
 AppSupportURL=https://github.com/Ad-Ins/DailyActivityApp/issues
 AppUpdatesURL=https://github.com/Ad-Ins/DailyActivityApp/releases
+AppContact=support@ad-ins.com
+AppCopyright=Copyright (C) 2024 PT. Adicipta Inovasi Teknologi
+VersionInfoVersion={#GetVersionNumbersString("publish\AdinersDailyActivityApp.exe")}
+VersionInfoCompany=PT. Adicipta Inovasi Teknologi
+VersionInfoDescription=Daily Activity Tracking Application
+VersionInfoCopyright=Copyright (C) 2024 PT. Adicipta Inovasi Teknologi
+VersionInfoProductName=Adiners Daily Activity
+VersionInfoProductVersion={#GetVersionNumbersString("publish\AdinersDailyActivityApp.exe")}
 DefaultDirName={autopf}\AdinersDailyActivity
 DefaultGroupName=Adiners Daily Activity
 OutputDir=installer-output
@@ -16,6 +24,7 @@ SolidCompression=yes
 DisableProgramGroupPage=no
 UninstallDisplayIcon={app}\AdinersDailyActivityApp.exe
 PrivilegesRequired=lowest
+SignTool=bypassed
 
 
 [Files]
