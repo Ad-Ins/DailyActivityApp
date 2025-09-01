@@ -58,6 +58,10 @@ namespace AdinersDailyActivityApp
         public string ClockifyWorkspaceId { get; set; } = string.Empty;
         public string ClockifyProjectId { get; set; } = string.Empty;
         public bool ClockifyAutoCreateTasks { get; set; } = true;
+        
+        // Multi-JIRA settings
+        public bool EnableMultiJira { get; set; } = false;
+        public string DefaultJiraInstance { get; set; } = string.Empty;
 
         // Enkripsi / dekripsi sederhana menggunakan DPAPI
         public static string Encrypt(string plain)

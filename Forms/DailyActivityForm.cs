@@ -92,6 +92,9 @@ namespace AdinersDailyActivityApp
         private Timer clockifyCheckTimer = null!;
         private string clockifyUserId = "";
         
+        // Multi-JIRA integration
+        private MultiJiraService multiJiraService = null!;
+        
         private const string TypeHint = "Enter type...";
         private const string ActivityHint = "Enter activity...";
         #endregion
@@ -103,6 +106,7 @@ namespace AdinersDailyActivityApp
             SetupForm();
             LoadConfig();
             InitializeClockify();
+            InitializeMultiJira();
             
             // Initialize popup timer variables
             this.popupTime = popupTime;
@@ -189,6 +193,14 @@ namespace AdinersDailyActivityApp
             var clockifyItem = new ToolStripMenuItem("🔗 Clockify Integration", null, OnClockifySettingsClicked);
             clockifyItem.ToolTipText = "Configure Clockify API connection and sync settings";
             settingsMenu.DropDownItems.Add(clockifyItem);
+            
+            var multiJiraItem = new ToolStripMenuItem("🔗 Multi-JIRA Integration", null, OnMultiJiraSettingsClicked);
+            multiJiraItem.ToolTipText = "Configure multiple JIRA instances (v4, v6, Cloud)";
+            settingsMenu.DropDownItems.Add(multiJiraItem);
+            
+            var jiraTestItem = new ToolStripMenuItem("🔍 JIRA Connection Test", null, OnJiraTestClicked);
+            jiraTestItem.ToolTipText = "Test JIRA connection and debug issues";
+            settingsMenu.DropDownItems.Add(jiraTestItem);
             
             settingsMenu.DropDownItems.Add("-");
             
@@ -784,6 +796,11 @@ namespace AdinersDailyActivityApp
             }
         }
         
+        private void InitializeMultiJira()
+        {
+            multiJiraService = new MultiJiraService();
+        }
+        
         private void OnClockifySettingsClicked(object? sender, EventArgs e)
         {
             using (var clockifyDialog = new ClockifySettingsDialog(
@@ -804,6 +821,27 @@ namespace AdinersDailyActivityApp
                     trayIcon.ShowBalloonTip(2000, "Clockify Settings", "Settings saved successfully!", ToolTipIcon.Info);
                 }
             }
+        }
+        
+        private void OnMultiJiraSettingsClicked(object? sender, EventArgs e)
+        {
+            using (var multiJiraDialog = new MultiJiraSettingsDialog(multiJiraService))
+            {
+                if (multiJiraDialog.ShowDialog() == DialogResult.OK)
+                {
+                    config.EnableMultiJira = true;
+                    config.Save();
+                    
+                    InitializeMultiJira();
+                    trayIcon.ShowBalloonTip(2000, "Multi-JIRA Settings", "Settings saved successfully!", ToolTipIcon.Info);
+                }
+            }
+        }
+        
+        private void OnJiraTestClicked(object? sender, EventArgs e)
+        {
+            var testDialog = new JiraConnectionTestDialog();
+            testDialog.Show();
         }
         
         private void OnDontShowTodayClicked(object? sender, EventArgs e)
