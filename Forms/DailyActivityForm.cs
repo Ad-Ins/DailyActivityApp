@@ -509,8 +509,8 @@ namespace AdinersDailyActivityApp
             
             var clearBtn = new Button
             {
-                Text = "✕",
-                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                Text = "Clear",
+                Font = new Font("Segoe UI", 9),
                 BackColor = Color.FromArgb(60, 60, 60),
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
