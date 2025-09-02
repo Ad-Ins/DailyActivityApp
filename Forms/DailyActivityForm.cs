@@ -279,7 +279,7 @@ namespace AdinersDailyActivityApp
             historyContextMenu.Items.Add("Delete Activities (F3)", null, OnDeleteHistoryClicked);
             historyContextMenu.Items.Add("-");
             historyContextMenu.Items.Add("Sync to Clockify (F4)", null, OnSyncToClockifyClicked);
-            historyContextMenu.Items.Add("Bulk Edit Selected", null, OnBulkEditClicked);
+            historyContextMenu.Items.Add("Bulk Edit Selected (F5)", null, OnBulkEditClicked);
             historyContextMenu.Items.Add("Export Selected", null, OnExportSelectedClicked);
             lstActivityHistory.ContextMenuStrip = historyContextMenu;
             lstActivityHistory.KeyDown += LstActivityHistory_KeyDown;
@@ -582,6 +582,11 @@ namespace AdinersDailyActivityApp
                 OnSyncToClockifyClicked(sender, e);
                 e.Handled = true;
             }
+            if (e.KeyCode == Keys.F5)
+            {
+                OnBulkEditClicked(sender, e);
+                e.Handled = true;
+            }
         }
 
         private void LstActivityHistory_DrawItem(object? sender, DrawItemEventArgs e)
@@ -619,6 +624,11 @@ namespace AdinersDailyActivityApp
             else if (e.KeyCode == Keys.F4)
             {
                 OnSyncToClockifyClicked(sender, e);
+                e.Handled = true;
+            }
+            else if (e.KeyCode == Keys.F5)
+            {
+                OnBulkEditClicked(sender, e);
                 e.Handled = true;
             }
         }
@@ -3837,13 +3847,37 @@ namespace AdinersDailyActivityApp
             
             if (activitiesToEdit.Count == 0)
             {
-                ShowDarkMessageBox("Please select activities (not headers) for bulk edit.", "No Activities Selected");
-                return;
+                // Auto-select first activity if none selected
+                for (int i = 0; i < lstActivityHistory.Items.Count; i++)
+                {
+                    string item = lstActivityHistory.Items[i].ToString();
+                    if (item.StartsWith("     "))
+                    {
+                        lstActivityHistory.SelectedIndex = i;
+                        activitiesToEdit = new List<object> { lstActivityHistory.Items[i] };
+                        break;
+                    }
+                }
+                
+                if (activitiesToEdit.Count == 0)
+                {
+                    ShowDarkMessageBox("No activities found for bulk edit.", "No Activities");
+                    return;
+                }
             }
             
-            using (var bulkEditDialog = new BulkEditDialog(activitiesToEdit.Count))
+            // Hide fullscreen overlay if visible
+            if (this.Visible && this.WindowState == FormWindowState.Maximized)
             {
-                if (bulkEditDialog.ShowDialog() == DialogResult.OK)
+                this.Hide();
+            }
+            
+            var bulkEditDialog = new BulkEditDialog(activitiesToEdit.Count);
+            bulkEditDialog.TopMost = true;
+            bulkEditDialog.BringToFront();
+            bulkEditDialog.Activate();
+            bulkEditDialog.FormClosed += (s, args) => {
+                if (bulkEditDialog.DialogResult == DialogResult.OK)
                 {
                     // Apply bulk changes
                     foreach (var item in activitiesToEdit)
@@ -3855,7 +3889,8 @@ namespace AdinersDailyActivityApp
                     LoadLogHistory();
                     trayIcon.ShowBalloonTip(2000, "Bulk Edit Complete", $"Updated {activitiesToEdit.Count} activities", ToolTipIcon.Info);
                 }
-            }
+            };
+            bulkEditDialog.Show();
         }
         
         private void OnExportSelectedClicked(object? sender, EventArgs e)
@@ -3925,9 +3960,13 @@ namespace AdinersDailyActivityApp
         {
             this.Text = $"Bulk Edit {activityCount} Activities";
             this.Size = new Size(400, 200);
-            this.StartPosition = FormStartPosition.CenterParent;
+            this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Color.FromArgb(30, 30, 30);
             this.ForeColor = Color.White;
+            this.TopMost = true;
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
             
             var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 2 };
             
