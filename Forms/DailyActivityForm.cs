@@ -186,6 +186,10 @@ namespace AdinersDailyActivityApp
             exportItem.ToolTipText = "Export activity log to Excel with detailed reports";
             dataMenu.DropDownItems.Add(exportItem);
             
+            var overtimeItem = new ToolStripMenuItem("⏰ Overtime Manager", null, OnOvertimeManagerClicked);
+            overtimeItem.ToolTipText = "Manage overtime activities and calculate compensation";
+            dataMenu.DropDownItems.Add(overtimeItem);
+            
             trayMenu.Items.Add(dataMenu);
             
             // === SETTINGS ===
@@ -4063,7 +4067,453 @@ namespace AdinersDailyActivityApp
             return suggestions.Distinct().Take(8).ToList();
         }
         
+        private void OnOvertimeManagerClicked(object? sender, EventArgs e)
+        {
+            var overtimeForm = new OvertimeManagerForm();
+            overtimeForm.Show();
+        }
+        
         #endregion
+    }
+    
+    // Overtime Manager Form
+    public class OvertimeManagerForm : Form
+    {
+        private DataGridView overtimeGrid = null!;
+        private Label summaryLabel = null!;
+        private Label mandaysLabel = null!;
+        private List<OvertimeEntry> overtimeEntries = new();
+        
+        public OvertimeManagerForm()
+        {
+            InitializeComponent();
+            LoadOvertimeData();
+        }
+        
+        private void InitializeComponent()
+        {
+            this.Text = "⏰ Overtime Manager";
+            this.Size = new Size(900, 600);
+            this.StartPosition = FormStartPosition.CenterScreen;
+            this.BackColor = Color.FromArgb(30, 30, 30);
+            this.ForeColor = Color.White;
+            
+            var mainLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                RowCount = 4,
+                ColumnCount = 1,
+                Padding = new Padding(10)
+            };
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); // Title
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // Grid
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 80)); // Summary
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50)); // Buttons
+            
+            // Title
+            var titleLabel = new Label
+            {
+                Text = "⏰ Overtime Activities (After 8PM & Weekends)",
+                Font = new Font("Segoe UI", 14, FontStyle.Bold),
+                ForeColor = Color.FromArgb(100, 200, 255),
+                TextAlign = ContentAlignment.MiddleLeft,
+                Dock = DockStyle.Fill
+            };
+            mainLayout.Controls.Add(titleLabel, 0, 0);
+            
+            // DataGrid
+            overtimeGrid = new DataGridView
+            {
+                Dock = DockStyle.Fill,
+                BackgroundColor = Color.FromArgb(35, 35, 35),
+                ForeColor = Color.White,
+                GridColor = Color.FromArgb(60, 60, 60),
+                BorderStyle = BorderStyle.None,
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                MultiSelect = true,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
+            };
+            
+            // Setup columns
+            overtimeGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Applied", HeaderText = "Applied", Width = 80 });
+            overtimeGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Date", HeaderText = "Date", Width = 100 });
+            overtimeGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Type", HeaderText = "Type", Width = 120 });
+            overtimeGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Activity", HeaderText = "Activity", Width = 200 });
+            overtimeGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Duration", HeaderText = "Duration", Width = 100 });
+            overtimeGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Reason", HeaderText = "Reason", Width = 150 });
+            
+            // Style grid
+            foreach (DataGridViewColumn col in overtimeGrid.Columns)
+            {
+                col.DefaultCellStyle.BackColor = Color.FromArgb(45, 45, 45);
+                col.DefaultCellStyle.ForeColor = Color.White;
+                col.HeaderCell.Style.BackColor = Color.FromArgb(60, 60, 60);
+                col.HeaderCell.Style.ForeColor = Color.White;
+            }
+            
+            overtimeGrid.CellValueChanged += OvertimeGrid_CellValueChanged;
+            mainLayout.Controls.Add(overtimeGrid, 0, 1);
+            
+            // Summary Panel
+            var summaryPanel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.FromArgb(40, 40, 40),
+                Padding = new Padding(10)
+            };
+            
+            summaryLabel = new Label
+            {
+                Text = "Total Overtime: 0:00:00",
+                Font = new Font("Segoe UI", 12, FontStyle.Bold),
+                ForeColor = Color.FromArgb(255, 200, 100),
+                Location = new Point(10, 10),
+                AutoSize = true
+            };
+            
+            mandaysLabel = new Label
+            {
+                Text = "Estimated Mandays: 0.00 days",
+                Font = new Font("Segoe UI", 11),
+                ForeColor = Color.FromArgb(100, 255, 100),
+                Location = new Point(10, 35),
+                AutoSize = true
+            };
+            
+            summaryPanel.Controls.Add(summaryLabel);
+            summaryPanel.Controls.Add(mandaysLabel);
+            mainLayout.Controls.Add(summaryPanel, 0, 2);
+            
+            // Buttons Panel
+            var buttonPanel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 4,
+                RowCount = 1
+            };
+            buttonPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+            buttonPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+            buttonPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+            buttonPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+            
+            var refreshBtn = CreateButton("Refresh", OnRefreshClicked);
+            var markAllBtn = CreateButton("Mark All Applied", OnMarkAllClicked);
+            var exportBtn = CreateButton("Export", OnExportClicked);
+            var closeBtn = CreateButton("Close", (s, e) => this.Close());
+            
+            buttonPanel.Controls.Add(refreshBtn, 0, 0);
+            buttonPanel.Controls.Add(markAllBtn, 1, 0);
+            buttonPanel.Controls.Add(exportBtn, 2, 0);
+            buttonPanel.Controls.Add(closeBtn, 3, 0);
+            
+            mainLayout.Controls.Add(buttonPanel, 0, 3);
+            this.Controls.Add(mainLayout);
+        }
+        
+        private Button CreateButton(string text, EventHandler clickHandler)
+        {
+            var btn = new Button
+            {
+                Text = text,
+                BackColor = Color.FromArgb(0, 120, 215),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Dock = DockStyle.Fill,
+                Margin = new Padding(5),
+                Font = new Font("Segoe UI", 10)
+            };
+            btn.FlatAppearance.BorderSize = 0;
+            btn.Click += clickHandler;
+            return btn;
+        }
+        
+        private void LoadOvertimeData()
+        {
+            overtimeEntries.Clear();
+            overtimeGrid.Rows.Clear();
+            
+            string logFilePath = GetLogFilePath();
+            if (!File.Exists(logFilePath)) return;
+            
+            var lines = File.ReadAllLines(logFilePath);
+            var entries = new List<(DateTime timestamp, string type, string activity, string originalLine)>();
+            
+            // Parse log entries
+            foreach (string line in lines)
+            {
+                var parsed = ParseLogEntry(line);
+                if (parsed != null)
+                {
+                    entries.Add((parsed.Value.timestamp, parsed.Value.type, parsed.Value.activity, line));
+                }
+            }
+            
+            // Calculate overtime segments
+            var dateGroups = entries.GroupBy(e => e.timestamp.Date).OrderBy(g => g.Key);
+            
+            foreach (var dateGroup in dateGroups)
+            {
+                DateTime date = dateGroup.Key;
+                bool isWeekend = date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday;
+                
+                var typeGroups = dateGroup.GroupBy(e => e.type, StringComparer.OrdinalIgnoreCase);
+                
+                foreach (var typeGroup in typeGroups)
+                {
+                    var typeEntries = typeGroup.ToList();
+                    DateTime? prevTime = typeEntries.Count > 0 ? typeEntries.First().timestamp : null;
+                    
+                    foreach (var entry in typeEntries)
+                    {
+                        DateTime start = prevTime ?? entry.timestamp;
+                        DateTime end = entry.timestamp;
+                        
+                        // Check if this is overtime
+                        bool isAfter8PM = end.Hour >= 20;
+                        bool isOvertime = isWeekend || isAfter8PM;
+                        
+                        if (isOvertime && (end - start).TotalMinutes > 0)
+                        {
+                            string reason = "";
+                            if (isWeekend && isAfter8PM) reason = "Weekend + After 8PM";
+                            else if (isWeekend) reason = "Weekend";
+                            else if (isAfter8PM) reason = "After 8PM";
+                            
+                            var overtimeEntry = new OvertimeEntry
+                            {
+                                Date = date,
+                                Type = entry.type,
+                                Activity = entry.activity,
+                                Start = start,
+                                End = end,
+                                Duration = end - start,
+                                Reason = reason,
+                                Applied = false
+                            };
+                            
+                            overtimeEntries.Add(overtimeEntry);
+                        }
+                        
+                        prevTime = end;
+                    }
+                }
+            }
+            
+            // Populate grid
+            foreach (var entry in overtimeEntries.OrderByDescending(e => e.Date))
+            {
+                string durationStr = $"{(int)entry.Duration.TotalHours:D2}:{entry.Duration.Minutes:D2}:{entry.Duration.Seconds:D2}";
+                
+                overtimeGrid.Rows.Add(
+                    entry.Applied,
+                    entry.Date.ToString("dd/MM/yyyy"),
+                    entry.Type,
+                    entry.Activity,
+                    durationStr,
+                    entry.Reason
+                );
+            }
+            
+            UpdateSummary();
+        }
+        
+        private void UpdateSummary()
+        {
+            var totalDuration = TimeSpan.Zero;
+            var appliedDuration = TimeSpan.Zero;
+            
+            foreach (var entry in overtimeEntries)
+            {
+                totalDuration = totalDuration.Add(entry.Duration);
+                if (entry.Applied)
+                {
+                    appliedDuration = appliedDuration.Add(entry.Duration);
+                }
+            }
+            
+            var pendingDuration = totalDuration.Subtract(appliedDuration);
+            
+            summaryLabel.Text = $"Total Overtime: {FormatDuration(totalDuration)} | Applied: {FormatDuration(appliedDuration)} | Pending: {FormatDuration(pendingDuration)}";
+            
+            // Calculate mandays (8 hours = 1 manday)
+            double totalMandays = totalDuration.TotalHours / 8.0;
+            double appliedMandays = appliedDuration.TotalHours / 8.0;
+            double pendingMandays = pendingDuration.TotalHours / 8.0;
+            
+            mandaysLabel.Text = $"Estimated Mandays - Total: {totalMandays:F2} | Applied: {appliedMandays:F2} | Pending: {pendingMandays:F2}";
+        }
+        
+        private string FormatDuration(TimeSpan duration)
+        {
+            return $"{(int)duration.TotalHours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2}";
+        }
+        
+        private void OvertimeGrid_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.ColumnIndex == 0 && e.RowIndex >= 0) // Applied column
+            {
+                bool applied = (bool)overtimeGrid.Rows[e.RowIndex].Cells[0].Value;
+                if (e.RowIndex < overtimeEntries.Count)
+                {
+                    overtimeEntries[e.RowIndex].Applied = applied;
+                    UpdateSummary();
+                }
+            }
+        }
+        
+        private void OnRefreshClicked(object? sender, EventArgs e)
+        {
+            LoadOvertimeData();
+        }
+        
+        private void OnMarkAllClicked(object? sender, EventArgs e)
+        {
+            foreach (var entry in overtimeEntries)
+            {
+                entry.Applied = true;
+            }
+            
+            for (int i = 0; i < overtimeGrid.Rows.Count; i++)
+            {
+                overtimeGrid.Rows[i].Cells[0].Value = true;
+            }
+            
+            UpdateSummary();
+        }
+        
+        private void OnExportClicked(object? sender, EventArgs e)
+        {
+            using (SaveFileDialog saveFileDialog = new SaveFileDialog())
+            {
+                saveFileDialog.Filter = "Excel files (*.xlsx)|*.xlsx|CSV files (*.csv)|*.csv";
+                saveFileDialog.Title = "Export Overtime Report";
+                string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                saveFileDialog.FileName = $"overtime_report_{timestamp}.xlsx";
+                
+                if (saveFileDialog.ShowDialog() == DialogResult.OK)
+                {
+                    ExportOvertimeReport(saveFileDialog.FileName);
+                }
+            }
+        }
+        
+        private void ExportOvertimeReport(string filePath)
+        {
+            try
+            {
+                if (filePath.EndsWith(".csv"))
+                {
+                    ExportToCsv(filePath);
+                }
+                else
+                {
+                    ExportToExcel(filePath);
+                }
+                
+                MessageBox.Show($"Overtime report exported successfully!\n\n{filePath}", "Export Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error exporting report: {ex.Message}", "Export Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+        
+        private void ExportToCsv(string filePath)
+        {
+            var csvLines = new List<string>
+            {
+                "Date,Type,Activity,Duration,Reason,Applied"
+            };
+            
+            foreach (var entry in overtimeEntries)
+            {
+                string durationStr = FormatDuration(entry.Duration);
+                csvLines.Add($"{entry.Date:dd/MM/yyyy},{entry.Type},{entry.Activity},{durationStr},{entry.Reason},{entry.Applied}");
+            }
+            
+            // Add summary
+            var totalDuration = overtimeEntries.Aggregate(TimeSpan.Zero, (sum, e) => sum.Add(e.Duration));
+            double totalMandays = totalDuration.TotalHours / 8.0;
+            
+            csvLines.Add("");
+            csvLines.Add($"Total Duration,{FormatDuration(totalDuration)}");
+            csvLines.Add($"Total Mandays,{totalMandays:F2}");
+            
+            File.WriteAllLines(filePath, csvLines);
+        }
+        
+        private void ExportToExcel(string filePath)
+        {
+            // Simple Excel export using CSV format with .xlsx extension
+            // For full Excel support, would need ClosedXML or similar library
+            ExportToCsv(filePath.Replace(".xlsx", ".csv"));
+        }
+        
+        private string GetLogFilePath()
+        {
+            string appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AdinersDailyActivity");
+            return Path.Combine(appDataDir, "activity_log.txt");
+        }
+        
+        private (DateTime timestamp, string type, string activity)? ParseLogEntry(string logEntry)
+        {
+            try
+            {
+                int timestampEndIndex = logEntry.IndexOf(']');
+                if (timestampEndIndex <= 0) return null;
+                
+                string timestampStr = logEntry.Substring(1, timestampEndIndex - 1);
+                if (!DateTime.TryParse(timestampStr, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime timestamp))
+                    return null;
+                
+                string rest = logEntry.Substring(timestampEndIndex + 2).Trim();
+                
+                // Remove sync flags
+                if (rest.StartsWith("[SYNCED]") || rest.StartsWith("[LOCAL]"))
+                {
+                    int flagEnd = rest.IndexOf(']', 1);
+                    if (flagEnd != -1) rest = rest.Substring(flagEnd + 1).Trim();
+                }
+                
+                // Remove Clockify ID
+                int cidIndex = rest.IndexOf(" [CID:");
+                if (cidIndex != -1)
+                {
+                    int endIndex = rest.IndexOf("]", cidIndex);
+                    if (endIndex != -1) rest = rest.Substring(0, cidIndex) + rest.Substring(endIndex + 1);
+                }
+                
+                string type = "";
+                string activity = rest.Trim();
+                
+                int pipeIndex = rest.IndexOf('|');
+                if (pipeIndex > 0)
+                {
+                    type = rest.Substring(0, pipeIndex).Trim();
+                    activity = rest.Substring(pipeIndex + 1).Trim();
+                }
+                
+                return (timestamp, type, activity);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+    
+    public class OvertimeEntry
+    {
+        public DateTime Date { get; set; }
+        public string Type { get; set; } = "";
+        public string Activity { get; set; } = "";
+        public DateTime Start { get; set; }
+        public DateTime End { get; set; }
+        public TimeSpan Duration { get; set; }
+        public string Reason { get; set; } = "";
+        public bool Applied { get; set; }
     }
     
     // Smart suggestion dialog
