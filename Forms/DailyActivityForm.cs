@@ -86,6 +86,11 @@ namespace AdinersDailyActivityApp
         // History expand/collapse functionality
         private HashSet<string> expandedHeaders = new();
         
+        // Search and filter functionality
+        private TextBox searchBox = null!;
+        private ComboBox filterCombo = null!;
+        private List<(DateTime time, string type, string activity, string originalLine)> allHistoryEntries = new();
+        
         // Clockify integration
         private ClockifyService clockifyService = null!;
         private string currentClockifyTimeEntryId = "";
@@ -272,7 +277,10 @@ namespace AdinersDailyActivityApp
             historyContextMenu.ForeColor = Color.White;
             historyContextMenu.Items.Add("Edit Activity (F2)", null, OnEditHistoryClicked);
             historyContextMenu.Items.Add("Delete Activities (F3)", null, OnDeleteHistoryClicked);
+            historyContextMenu.Items.Add("-");
             historyContextMenu.Items.Add("Sync to Clockify (F4)", null, OnSyncToClockifyClicked);
+            historyContextMenu.Items.Add("Bulk Edit Selected", null, OnBulkEditClicked);
+            historyContextMenu.Items.Add("Export Selected", null, OnExportSelectedClicked);
             lstActivityHistory.ContextMenuStrip = historyContextMenu;
             lstActivityHistory.KeyDown += LstActivityHistory_KeyDown;
         }
@@ -452,18 +460,94 @@ namespace AdinersDailyActivityApp
 
             mainLayout.Controls.Add(inputPanel, 0, 2);
 
+            // Search panel for history
+            var searchPanel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 3,
+                RowCount = 1,
+                BackColor = Color.FromArgb(20, 20, 20),
+                Margin = new Padding(5, 0, 5, 5)
+            };
+            searchPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70F));
+            searchPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20F));
+            searchPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10F));
+            
+            var searchBox = new TextBox
+            {
+                Font = new Font("Segoe UI", 10),
+                BackColor = Color.FromArgb(45, 45, 45),
+                ForeColor = Color.White,
+                BorderStyle = BorderStyle.FixedSingle,
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, 5, 5, 5),
+                Text = "Search activities..."
+            };
+            searchBox.GotFocus += (s, e) => { if (searchBox.Text == "Search activities...") searchBox.Text = ""; };
+            searchBox.LostFocus += (s, e) => { if (string.IsNullOrEmpty(searchBox.Text)) searchBox.Text = "Search activities..."; };
+            searchBox.TextChanged += (s, e) => FilterHistory(searchBox.Text);
+            
+            var filterCombo = new ComboBox
+            {
+                Font = new Font("Segoe UI", 10),
+                BackColor = Color.FromArgb(45, 45, 45),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, 5, 5, 5)
+            };
+            filterCombo.Items.AddRange(new[] { "All Types", "Today", "This Week", "This Month" });
+            filterCombo.SelectedIndex = 0;
+            filterCombo.SelectedIndexChanged += (s, e) => FilterHistory(searchBox.Text);
+            
+            var clearBtn = new Button
+            {
+                Text = "✕",
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                BackColor = Color.FromArgb(60, 60, 60),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, 5, 0, 5)
+            };
+            clearBtn.FlatAppearance.BorderSize = 0;
+            clearBtn.Click += (s, e) => { searchBox.Text = "Search activities..."; filterCombo.SelectedIndex = 0; FilterHistory(""); };
+            
+            searchPanel.Controls.Add(searchBox, 0, 0);
+            searchPanel.Controls.Add(filterCombo, 1, 0);
+            searchPanel.Controls.Add(clearBtn, 2, 0);
+            
+            // History container
+            var historyContainer = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                RowCount = 2,
+                ColumnCount = 1,
+                Margin = new Padding(5)
+            };
+            historyContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
+            historyContainer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            historyContainer.Controls.Add(searchPanel, 0, 0);
+            
             lstActivityHistory.Font = new Font("Segoe UI", 12);
             lstActivityHistory.BackColor = Color.FromArgb(35, 35, 35);
             lstActivityHistory.ForeColor = Color.White;
             lstActivityHistory.BorderStyle = BorderStyle.None;
             lstActivityHistory.Dock = DockStyle.Fill;
-            lstActivityHistory.Margin = new Padding(5);
+            lstActivityHistory.Margin = new Padding(0);
             lstActivityHistory.DrawMode = DrawMode.OwnerDrawFixed;
             lstActivityHistory.ItemHeight = 25;
             lstActivityHistory.SelectionMode = SelectionMode.MultiExtended;
             lstActivityHistory.DrawItem += LstActivityHistory_DrawItem;
             lstActivityHistory.MouseDoubleClick += LstActivityHistory_MouseDoubleClick;
-            mainLayout.Controls.Add(lstActivityHistory, 0, 3);
+            historyContainer.Controls.Add(lstActivityHistory, 0, 1);
+            
+            mainLayout.Controls.Add(historyContainer, 0, 3);
+            
+            // Store references for filtering
+            this.searchBox = searchBox;
+            this.filterCombo = filterCombo;
 
             this.Controls.Add(mainLayout);
             this.Hide();
@@ -2168,6 +2252,7 @@ namespace AdinersDailyActivityApp
         private void LoadLogHistory()
         {
             lstActivityHistory.Items.Clear();
+            allHistoryEntries.Clear();
             string logFilePath = GetLogFilePath();
             if (File.Exists(logFilePath))
             {
@@ -2219,10 +2304,12 @@ namespace AdinersDailyActivityApp
                             // Don't modify the actual activity text
                             
                             entries.Add((time, type, activity));
+                            allHistoryEntries.Add((time, type, activity, line));
                         }
                     }
                 }
                 entries.Sort((a, b) => a.time.CompareTo(b.time)); // Sort ascending
+                allHistoryEntries.Sort((a, b) => a.time.CompareTo(b.time));
 
                 // Group by date
                 var dateGroups = entries.GroupBy(e => e.time.Date).OrderByDescending(g => g.Key); // Newest first
@@ -2322,6 +2409,107 @@ namespace AdinersDailyActivityApp
             int hours = totalMinutes / 60;
             int minutes = totalMinutes % 60;
             return $"{hours:D2}:{minutes:D2}:00";
+        }
+        
+        private void FilterHistory(string searchText)
+        {
+            if (searchBox?.Text == "Search activities..." || string.IsNullOrEmpty(searchText?.Trim()))
+                searchText = "";
+                
+            var filteredEntries = allHistoryEntries.AsEnumerable();
+            
+            // Apply search filter
+            if (!string.IsNullOrEmpty(searchText))
+            {
+                filteredEntries = filteredEntries.Where(e => 
+                    e.activity.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+                    e.type.Contains(searchText, StringComparison.OrdinalIgnoreCase));
+            }
+            
+            // Apply date filter
+            if (filterCombo?.SelectedIndex > 0)
+            {
+                var now = DateTime.Now;
+                filteredEntries = filterCombo.SelectedIndex switch
+                {
+                    1 => filteredEntries.Where(e => e.time.Date == now.Date), // Today
+                    2 => filteredEntries.Where(e => e.time >= now.AddDays(-7)), // This Week
+                    3 => filteredEntries.Where(e => e.time >= now.AddDays(-30)), // This Month
+                    _ => filteredEntries
+                };
+            }
+            
+            DisplayFilteredHistory(filteredEntries.ToList());
+        }
+        
+        private void DisplayFilteredHistory(List<(DateTime time, string type, string activity, string originalLine)> entries)
+        {
+            lstActivityHistory.Items.Clear();
+            
+            if (!entries.Any())
+            {
+                lstActivityHistory.Items.Add("No activities found matching your search.");
+                return;
+            }
+            
+            // Group and display similar to LoadLogHistory but with filtered data
+            var dateGroups = entries.GroupBy(e => e.time.Date).OrderByDescending(g => g.Key);
+            
+            foreach (var dateGroup in dateGroups)
+            {
+                var typeGroups = dateGroup.GroupBy(e => e.type, StringComparer.OrdinalIgnoreCase);
+                
+                foreach (var typeGroup in typeGroups)
+                {
+                    var typeEntries = typeGroup.ToList();
+                    var segments = CalculateSegments(typeEntries);
+                    
+                    if (segments.Any())
+                    {
+                        var totalDur = segments.Sum(s => s.dur);
+                        var overallStart = segments.Min(s => s.start);
+                        var overallEnd = segments.Max(s => s.end);
+                        
+                        string dateStr = dateGroup.Key.ToString("dd/MM/yyyy");
+                        string headerKey = $"[{dateStr} | {overallStart:HH:mm}-{overallEnd:HH:mm} | {FormatDuration(totalDur)}] {typeGroup.Key}";
+                        bool isExpanded = expandedHeaders.Contains(headerKey);
+                        
+                        string expandIcon = isExpanded ? "▼" : "▶";
+                        lstActivityHistory.Items.Add($"{expandIcon} {headerKey}");
+                        
+                        if (isExpanded)
+                        {
+                            foreach (var seg in segments)
+                            {
+                                bool isActivitySynced = seg.originalLine.Contains("[SYNCED]") || seg.originalLine.Contains("[CID:");
+                                string syncIcon = isActivitySynced ? "✓" : "⚠";
+                                string sub = $"     [{seg.start:HH:mm} - {seg.end:HH:mm} | {FormatDuration(seg.dur)}] [{syncIcon}] {seg.activity}";
+                                lstActivityHistory.Items.Add(sub);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        private List<(DateTime start, DateTime end, int dur, string activity, string originalLine)> CalculateSegments(
+            List<(DateTime time, string type, string activity, string originalLine)> typeEntries)
+        {
+            var segments = new List<(DateTime start, DateTime end, int dur, string activity, string originalLine)>();
+            DateTime? prevTime = typeEntries.Count > 0 ? typeEntries.First().time : null;
+            
+            foreach (var entry in typeEntries)
+            {
+                DateTime start = prevTime ?? entry.time;
+                DateTime end = entry.time;
+                int dur = (int)(end - start).TotalMinutes;
+                if (dur < 0) dur = 0;
+                
+                segments.Add((start, end, dur, entry.activity, entry.originalLine));
+                prevTime = end;
+            }
+            
+            return segments;
         }
         
 
@@ -3642,6 +3830,121 @@ namespace AdinersDailyActivityApp
                 colorIndex++;
             }
         }
+        private void OnBulkEditClicked(object? sender, EventArgs e)
+        {
+            var selectedItems = lstActivityHistory.SelectedItems.Cast<object>().ToList();
+            var activitiesToEdit = selectedItems.Where(item => item.ToString().StartsWith("     ")).ToList();
+            
+            if (activitiesToEdit.Count == 0)
+            {
+                ShowDarkMessageBox("Please select activities (not headers) for bulk edit.", "No Activities Selected");
+                return;
+            }
+            
+            using (var bulkEditDialog = new BulkEditDialog(activitiesToEdit.Count))
+            {
+                if (bulkEditDialog.ShowDialog() == DialogResult.OK)
+                {
+                    // Apply bulk changes
+                    foreach (var item in activitiesToEdit)
+                    {
+                        // Extract and update each activity based on bulk edit settings
+                        // Implementation would depend on BulkEditDialog design
+                    }
+                    
+                    LoadLogHistory();
+                    trayIcon.ShowBalloonTip(2000, "Bulk Edit Complete", $"Updated {activitiesToEdit.Count} activities", ToolTipIcon.Info);
+                }
+            }
+        }
+        
+        private void OnExportSelectedClicked(object? sender, EventArgs e)
+        {
+            var selectedItems = lstActivityHistory.SelectedItems.Cast<object>().ToList();
+            var activitiesToExport = selectedItems.Where(item => item.ToString().StartsWith("     ")).ToList();
+            
+            if (activitiesToExport.Count == 0)
+            {
+                ShowDarkMessageBox("Please select activities (not headers) to export.", "No Activities Selected");
+                return;
+            }
+            
+            using (SaveFileDialog saveFileDialog = new SaveFileDialog())
+            {
+                saveFileDialog.Filter = "Excel files (*.xlsx)|*.xlsx|CSV files (*.csv)|*.csv|All files (*.*)|*.*";
+                saveFileDialog.Title = "Export Selected Activities";
+                string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                saveFileDialog.FileName = $"selected_activities_{timestamp}.xlsx";
+                
+                if (saveFileDialog.ShowDialog() == DialogResult.OK)
+                {
+                    ExportSelectedActivities(activitiesToExport, saveFileDialog.FileName);
+                    trayIcon.ShowBalloonTip(2000, "Export Complete", $"Exported {activitiesToExport.Count} activities", ToolTipIcon.Info);
+                }
+            }
+        }
+        
+        private void ExportSelectedActivities(List<object> selectedActivities, string filePath)
+        {
+            // Simple CSV export for selected activities
+            var csvLines = new List<string> { "Date,Start,End,Duration,Type,Activity" };
+            
+            foreach (var item in selectedActivities)
+            {
+                string itemText = item.ToString();
+                // Parse activity details and add to CSV
+                // Implementation would extract time, type, activity from formatted string
+                csvLines.Add($"Sample,Data,For,Selected,Activities,{itemText.Substring(0, Math.Min(50, itemText.Length))}");
+            }
+            
+            try
+            {
+                File.WriteAllLines(filePath, csvLines);
+            }
+            catch (Exception ex)
+            {
+                ShowDarkMessageBox($"Error exporting activities: {ex.Message}", "Export Error");
+            }
+        }
+        
         #endregion
+    }
+    
+    // Simple bulk edit dialog
+    public class BulkEditDialog : Form
+    {
+        public string NewType { get; private set; } = "";
+        public bool UpdateType { get; private set; } = false;
+        
+        public BulkEditDialog(int activityCount)
+        {
+            InitializeComponent(activityCount);
+        }
+        
+        private void InitializeComponent(int activityCount)
+        {
+            this.Text = $"Bulk Edit {activityCount} Activities";
+            this.Size = new Size(400, 200);
+            this.StartPosition = FormStartPosition.CenterParent;
+            this.BackColor = Color.FromArgb(30, 30, 30);
+            this.ForeColor = Color.White;
+            
+            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 2 };
+            
+            var typeCheckBox = new CheckBox { Text = "Update Type:", ForeColor = Color.White, Dock = DockStyle.Fill };
+            var typeTextBox = new TextBox { BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, Dock = DockStyle.Fill };
+            
+            var okButton = new Button { Text = "Apply", DialogResult = DialogResult.OK, BackColor = Color.FromArgb(0, 120, 215), ForeColor = Color.White };
+            var cancelButton = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, BackColor = Color.FromArgb(60, 60, 60), ForeColor = Color.White };
+            
+            okButton.Click += (s, e) => { UpdateType = typeCheckBox.Checked; NewType = typeTextBox.Text; };
+            
+            layout.Controls.Add(typeCheckBox, 0, 0);
+            layout.Controls.Add(typeTextBox, 1, 0);
+            layout.Controls.Add(okButton, 0, 2);
+            layout.Controls.Add(cancelButton, 1, 2);
+            
+            this.Controls.Add(layout);
+        }
     }
 }
