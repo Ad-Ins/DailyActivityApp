@@ -91,6 +91,11 @@ namespace AdinersDailyActivityApp
         private ComboBox filterCombo = null!;
         private List<(DateTime time, string type, string activity, string originalLine)> allHistoryEntries = new();
         
+        // Phase 2: Smart suggestions
+        private List<string> smartSuggestions = new();
+        private Dictionary<TimeSpan, List<string>> timeBasedSuggestions = new();
+        private Dictionary<DayOfWeek, List<string>> dayBasedSuggestions = new();
+        
         // Clockify integration
         private ClockifyService clockifyService = null!;
         private string currentClockifyTimeEntryId = "";
@@ -108,6 +113,7 @@ namespace AdinersDailyActivityApp
             SetupForm();
             LoadConfig();
             InitializeClockify();
+            InitializeSmartSuggestions();
             
             // Initialize popup timer variables
             this.popupTime = popupTime;
@@ -3942,7 +3948,182 @@ namespace AdinersDailyActivityApp
             }
         }
         
+        private void InitializeSmartSuggestions()
+        {
+            LoadSmartSuggestions();
+            
+            // Add suggestion button next to activity input
+            var suggestBtn = new Button
+            {
+                Text = "💡",
+                Size = new Size(30, 30),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(60, 60, 60),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 12)
+            };
+            suggestBtn.FlatAppearance.BorderSize = 0;
+            suggestBtn.Click += ShowSmartSuggestions;
+            
+            // Position suggestion button (would need layout adjustment)
+        }
+        
+        private void LoadSmartSuggestions()
+        {
+            // Analyze history for patterns
+            var now = DateTime.Now;
+            var currentTime = now.TimeOfDay;
+            var currentDay = now.DayOfWeek;
+            
+            // Time-based suggestions (9AM = meetings, 2PM = coding, etc.)
+            timeBasedSuggestions[new TimeSpan(9, 0, 0)] = new List<string> { "Daily Standup", "Team Meeting", "Planning" };
+            timeBasedSuggestions[new TimeSpan(10, 0, 0)] = new List<string> { "Coding", "Development", "Bug Fixing" };
+            timeBasedSuggestions[new TimeSpan(14, 0, 0)] = new List<string> { "Code Review", "Testing", "Documentation" };
+            timeBasedSuggestions[new TimeSpan(16, 0, 0)] = new List<string> { "Email", "Admin Tasks", "Planning" };
+            
+            // Day-based suggestions
+            dayBasedSuggestions[DayOfWeek.Monday] = new List<string> { "Weekly Planning", "Sprint Planning", "Team Sync" };
+            dayBasedSuggestions[DayOfWeek.Friday] = new List<string> { "Sprint Review", "Weekly Report", "Cleanup" };
+            
+            // Learn from history
+            LearnFromHistory();
+        }
+        
+        private void LearnFromHistory()
+        {
+            // Analyze user patterns from allHistoryEntries
+            var patterns = allHistoryEntries
+                .GroupBy(e => new { Hour = e.time.Hour, Day = e.time.DayOfWeek })
+                .Where(g => g.Count() >= 3) // At least 3 occurrences
+                .ToDictionary(g => g.Key, g => g.Select(e => e.activity).Distinct().ToList());
+                
+            foreach (var pattern in patterns)
+            {
+                var timeKey = new TimeSpan(pattern.Key.Hour, 0, 0);
+                if (!timeBasedSuggestions.ContainsKey(timeKey))
+                    timeBasedSuggestions[timeKey] = new List<string>();
+                    
+                timeBasedSuggestions[timeKey].AddRange(pattern.Value.Take(3));
+            }
+        }
+        
+        private void ShowSmartSuggestions(object? sender, EventArgs e)
+        {
+            var now = DateTime.Now;
+            var suggestions = GetCurrentSuggestions(now);
+            
+            if (!suggestions.Any())
+            {
+                trayIcon.ShowBalloonTip(2000, "Smart Suggestions", "No suggestions available for current time", ToolTipIcon.Info);
+                return;
+            }
+            
+            var suggestionForm = new SmartSuggestionDialog(suggestions);
+            suggestionForm.TopMost = true;
+            suggestionForm.SuggestionSelected += (suggestion) => {
+                txtActivity.Text = suggestion;
+                txtActivity.ForeColor = Color.White;
+            };
+            suggestionForm.Show();
+        }
+        
+        private List<string> GetCurrentSuggestions(DateTime now)
+        {
+            var suggestions = new List<string>();
+            var currentTime = now.TimeOfDay;
+            var currentDay = now.DayOfWeek;
+            
+            // Find closest time-based suggestions
+            var closestTime = timeBasedSuggestions.Keys
+                .OrderBy(t => Math.Abs((t - currentTime).TotalMinutes))
+                .FirstOrDefault();
+                
+            if (closestTime != default && timeBasedSuggestions.ContainsKey(closestTime))
+            {
+                suggestions.AddRange(timeBasedSuggestions[closestTime]);
+            }
+            
+            // Add day-based suggestions
+            if (dayBasedSuggestions.ContainsKey(currentDay))
+            {
+                suggestions.AddRange(dayBasedSuggestions[currentDay]);
+            }
+            
+            // Add recent activities
+            var recentActivities = allHistoryEntries
+                .Where(e => e.time >= now.AddDays(-7))
+                .GroupBy(e => e.activity)
+                .OrderByDescending(g => g.Count())
+                .Take(5)
+                .Select(g => g.Key)
+                .ToList();
+                
+            suggestions.AddRange(recentActivities);
+            
+            return suggestions.Distinct().Take(8).ToList();
+        }
+        
         #endregion
+    }
+    
+    // Smart suggestion dialog
+    public class SmartSuggestionDialog : Form
+    {
+        public event Action<string>? SuggestionSelected;
+        
+        public SmartSuggestionDialog(List<string> suggestions)
+        {
+            InitializeComponent(suggestions);
+        }
+        
+        private void InitializeComponent(List<string> suggestions)
+        {
+            this.Text = "💡 Smart Suggestions";
+            this.Size = new Size(350, 300);
+            this.StartPosition = FormStartPosition.CenterScreen;
+            this.BackColor = Color.FromArgb(30, 30, 30);
+            this.ForeColor = Color.White;
+            this.TopMost = true;
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
+            
+            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = suggestions.Count + 1, ColumnCount = 1 };
+            
+            var titleLabel = new Label
+            {
+                Text = $"Suggestions for {DateTime.Now:HH:mm} on {DateTime.Now:dddd}",
+                ForeColor = Color.FromArgb(100, 200, 255),
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Dock = DockStyle.Fill
+            };
+            layout.Controls.Add(titleLabel, 0, 0);
+            
+            for (int i = 0; i < suggestions.Count; i++)
+            {
+                var suggestion = suggestions[i];
+                var btn = new Button
+                {
+                    Text = suggestion,
+                    BackColor = Color.FromArgb(45, 45, 45),
+                    ForeColor = Color.White,
+                    FlatStyle = FlatStyle.Flat,
+                    Dock = DockStyle.Fill,
+                    Font = new Font("Segoe UI", 10),
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Margin = new Padding(5, 2, 5, 2)
+                };
+                btn.FlatAppearance.BorderSize = 0;
+                btn.Click += (s, e) => {
+                    SuggestionSelected?.Invoke(suggestion);
+                    this.Close();
+                };
+                layout.Controls.Add(btn, 0, i + 1);
+            }
+            
+            this.Controls.Add(layout);
+        }
     }
     
     // Simple bulk edit dialog
