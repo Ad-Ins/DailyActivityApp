@@ -560,10 +560,28 @@ namespace AdinersDailyActivityApp
                 else
                 {
                     // Sub-item: extract activity and find type from header
-                    int closingBracketIndex = selectedItemText.IndexOf(']');
-                    if (closingBracketIndex != -1)
+                    // Format: "     [HH:mm - HH:mm | duration] [✓/⚠] activity"
+                    int firstClosingBracket = selectedItemText.IndexOf(']');
+                    if (firstClosingBracket != -1)
                     {
-                        string activity = selectedItemText.Substring(closingBracketIndex + 1).Trim();
+                        // Find second bracket (sync status)
+                        int secondOpenBracket = selectedItemText.IndexOf('[', firstClosingBracket + 1);
+                        int secondClosingBracket = selectedItemText.IndexOf(']', secondOpenBracket + 1);
+                        
+                        string activity;
+                        if (secondClosingBracket != -1)
+                        {
+                            // Extract activity after sync status bracket
+                            activity = selectedItemText.Substring(secondClosingBracket + 1).Trim();
+                        }
+                        else
+                        {
+                            // Fallback: extract after first bracket (old format)
+                            activity = selectedItemText.Substring(firstClosingBracket + 1).Trim();
+                            // Remove sync icon if present
+                            if (activity.StartsWith("✓ ") || activity.StartsWith("⚠ "))
+                                activity = activity.Substring(2);
+                        }
                         
                         // Find the header (type) for this sub-item
                         int selectedIndex = lstActivityHistory.SelectedIndex;
@@ -1266,11 +1284,11 @@ namespace AdinersDailyActivityApp
                 return;
             }
 
-            // Parse sub-item: "     [HH:mm - HH:mm | duration] activity"
-            int closingBracketIndex = selectedItem.IndexOf(']');
-            if (closingBracketIndex == -1) return;
+            // Parse sub-item: "     [HH:mm - HH:mm | duration] [✓/⚠] activity"
+            int firstClosingBracket = selectedItem.IndexOf(']');
+            if (firstClosingBracket == -1) return;
 
-            string inside = selectedItem.Substring(6, closingBracketIndex - 6); // Skip "     ["
+            string inside = selectedItem.Substring(6, firstClosingBracket - 6); // Skip "     ["
             string[] parts = inside.Split('|');
             if (parts.Length != 2) return;
 
@@ -1280,7 +1298,23 @@ namespace AdinersDailyActivityApp
 
             string startStr = timeParts[0].Trim();
             string endStr = timeParts[1].Trim();
-            string activity = selectedItem.Substring(closingBracketIndex + 1).Trim();
+            
+            // Extract activity after sync status bracket
+            int secondOpenBracket = selectedItem.IndexOf('[', firstClosingBracket + 1);
+            int secondClosingBracket = selectedItem.IndexOf(']', secondOpenBracket + 1);
+            
+            string activity;
+            if (secondClosingBracket != -1)
+            {
+                activity = selectedItem.Substring(secondClosingBracket + 1).Trim();
+            }
+            else
+            {
+                // Fallback for old format
+                activity = selectedItem.Substring(firstClosingBracket + 1).Trim();
+                if (activity.StartsWith("✓ ") || activity.StartsWith("⚠ "))
+                    activity = activity.Substring(2);
+            }
 
             // Find date and type from header
             string dateStr = "";
@@ -2195,8 +2229,6 @@ namespace AdinersDailyActivityApp
                                 if (cleanActivity.StartsWith("✓ ") || cleanActivity.StartsWith("⚠ "))
                                     cleanActivity = cleanActivity.Substring(2);
                                 
-                                // Add sync icon only for display
-                                string displayActivity = cleanActivity;
                                 // Determine sync status from the original log entry
                                 bool isActivitySynced = false;
                                 string activityLogPath = GetLogFilePath();
@@ -2212,10 +2244,10 @@ namespace AdinersDailyActivityApp
                                         }
                                     }
                                 }
-                                string syncIcon = isActivitySynced ? "✓" : "⚠";
-                                displayActivity = $"{syncIcon} {cleanActivity}";
                                 
-                                string sub = $"     [{startStr} - {endStr} | {FormatDuration(seg.dur)}] {displayActivity}";
+                                // Separate sync status from activity text
+                                string syncIcon = isActivitySynced ? "✓" : "⚠";
+                                string sub = $"     [{startStr} - {endStr} | {FormatDuration(seg.dur)}] [{syncIcon}] {cleanActivity}";
                                 lstActivityHistory.Items.Add(sub);
                             }
                         }
@@ -3027,51 +3059,59 @@ namespace AdinersDailyActivityApp
             if (string.IsNullOrEmpty(currentClockifyTimeEntryId) || string.IsNullOrEmpty(config.ClockifyWorkspaceId))
                 return;
                 
-            try
+            int retryCount = 0;
+            const int maxRetries = 3;
+            
+            while (retryCount < maxRetries)
             {
-                var result = await clockifyService.StopTimeEntryAsync(config.ClockifyWorkspaceId, currentClockifyTimeEntryId);
-                if (result != null)
+                try
                 {
-                    // Successfully stopped
-                    currentClockifyTimeEntryId = "";
+                    var result = await clockifyService.StopTimeEntryAsync(config.ClockifyWorkspaceId, currentClockifyTimeEntryId);
+                    if (result != null)
+                    {
+                        // Successfully stopped
+                        currentClockifyTimeEntryId = "";
+                        return;
+                    }
+                    else
+                    {
+                        retryCount++;
+                        if (retryCount < maxRetries)
+                        {
+                            await Task.Delay(1000 * retryCount); // Progressive delay
+                            continue;
+                        }
+                        
+                        // Final failure - keep the ID for manual sync later
+                        trayIcon.ShowBalloonTip(3000, "Clockify Sync Issue", 
+                            "Failed to stop Clockify timer after retries. Activity saved locally and will sync later.", 
+                            ToolTipIcon.Warning);
+                        return;
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    // Failed to stop, but clear the ID anyway to prevent issues
-                    currentClockifyTimeEntryId = "";
-                    trayIcon.ShowBalloonTip(2000, "Clockify Warning", "Failed to stop Clockify timer. Please check manually.", ToolTipIcon.Warning);
+                    retryCount++;
+                    if (retryCount < maxRetries)
+                    {
+                        await Task.Delay(1000 * retryCount);
+                        continue;
+                    }
+                    
+                    // Final failure - keep the ID for manual sync later
+                    trayIcon.ShowBalloonTip(3000, "Clockify Connection Error", 
+                        $"Network error stopping Clockify timer. Activity saved locally.\nError: {ex.Message}", 
+                        ToolTipIcon.Warning);
+                    return;
                 }
-            }
-            catch (Exception ex)
-            {
-                // Clear the ID and show warning
-                currentClockifyTimeEntryId = "";
-                trayIcon.ShowBalloonTip(2000, "Clockify Error", $"Error stopping Clockify timer: {ex.Message}", ToolTipIcon.Warning);
             }
         }
         
         private async void ClockifyCheckTimer_Tick(object? sender, EventArgs e)
         {
-            if (string.IsNullOrEmpty(config.ClockifyApiKey) || string.IsNullOrEmpty(config.ClockifyWorkspaceId) || string.IsNullOrEmpty(clockifyUserId))
-                return;
-                
-            try
-            {
-                var currentEntry = await clockifyService.GetCurrentTimeEntryAsync(config.ClockifyWorkspaceId, clockifyUserId);
-                
-                // If Clockify timer is stopped but local timer is running
-                if (currentEntry == null && isTimerRunning && !string.IsNullOrEmpty(currentClockifyTimeEntryId))
-                {
-                    // Auto-stop local timer
-                    this.Invoke(() => {
-                        StopTimer();
-                        trayIcon.ShowBalloonTip(3000, "Timer Auto-Stopped", 
-                            "Timer stopped automatically because Clockify timer was stopped from web.", 
-                            ToolTipIcon.Info);
-                    });
-                }
-            }
-            catch { /* Ignore Clockify errors */ }
+            // DISABLED: Auto-stop feature removed to prevent unexpected timer stops
+            // Users reported timer stopping unexpectedly due to network issues or Clockify API problems
+            return;
         }
         
         private string ExtractClockifyIdFromLogEntry(string logEntry)
