@@ -87,6 +87,15 @@ namespace AdinersDailyActivityApp.Services
         {
             try
             {
+                // First check if task already exists
+                var existingTasks = await GetTasksAsync(workspaceId, projectId);
+                var existingTask = existingTasks.FirstOrDefault(t => t.Name.Equals(taskName, StringComparison.OrdinalIgnoreCase));
+                if (existingTask != null)
+                {
+                    return existingTask; // Return existing task instead of creating duplicate
+                }
+                
+                // Create new task if it doesn't exist
                 var taskData = new { name = taskName };
                 var json = JsonSerializer.Serialize(taskData);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -96,6 +105,12 @@ namespace AdinersDailyActivityApp.Services
                 {
                     var responseJson = await response.Content.ReadAsStringAsync();
                     return JsonSerializer.Deserialize<ClockifyTask>(responseJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                }
+                else
+                {
+                    // If creation fails, try to get the task again (might have been created by another process)
+                    var retryTasks = await GetTasksAsync(workspaceId, projectId);
+                    return retryTasks.FirstOrDefault(t => t.Name.Equals(taskName, StringComparison.OrdinalIgnoreCase));
                 }
             }
             catch { }

@@ -3148,11 +3148,21 @@ namespace AdinersDailyActivityApp
             {
                 string taskId = null;
                 
-                // Auto-create task if enabled
+                // Auto-create task if enabled and type is provided
                 if (config.ClockifyAutoCreateTasks && !string.IsNullOrEmpty(type))
                 {
                     var task = await clockifyService.CreateTaskAsync(config.ClockifyWorkspaceId, config.ClockifyProjectId, type);
-                    taskId = task?.Id;
+                    if (task != null)
+                    {
+                        taskId = task.Id;
+                        // Show success notification for task creation/finding
+                        trayIcon.ShowBalloonTip(2000, "Task Ready", $"Using task: {task.Name}", ToolTipIcon.Info);
+                    }
+                    else
+                    {
+                        // Show warning if task creation failed
+                        trayIcon.ShowBalloonTip(2000, "Task Warning", $"Could not create/find task: {type}. Timer will start without task.", ToolTipIcon.Warning);
+                    }
                 }
                 
                 var timeEntry = await clockifyService.StartTimeEntryAsync(config.ClockifyWorkspaceId, config.ClockifyProjectId, taskId, activity);
@@ -3161,7 +3171,11 @@ namespace AdinersDailyActivityApp
                     currentClockifyTimeEntryId = timeEntry.Id;
                 }
             }
-            catch { /* Ignore Clockify errors */ }
+            catch (Exception ex)
+            {
+                // Show error details for debugging
+                trayIcon.ShowBalloonTip(3000, "Clockify Error", $"Failed to start Clockify timer: {ex.Message}", ToolTipIcon.Error);
+            }
         }
         
         private async Task StopClockifyTimerAsync()
