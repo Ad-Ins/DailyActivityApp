@@ -113,6 +113,9 @@ namespace AdinersDailyActivityApp
             LoadLogHistory();
             SystemEvents.SessionEnding += SystemEvents_SessionEnding;
             
+            // Check for running Clockify timer on startup
+            _ = Task.Run(CheckClockifyOnStartup);
+            
             // Check for updates on startup (async)
             _ = Task.Run(CheckForUpdatesOnStartup);
         }
@@ -611,8 +614,16 @@ namespace AdinersDailyActivityApp
             }
         }
 
-        private void OnExitClicked(object? sender, EventArgs e)
+        private async void OnExitClicked(object? sender, EventArgs e)
         {
+            // Stop timer before exit
+            if (isTimerRunning)
+            {
+                StopTimer();
+                // Wait a moment for Clockify sync to complete
+                await Task.Delay(1000);
+            }
+            
             trayIcon.Visible = false;
             Application.Exit();
         }
@@ -860,6 +871,46 @@ namespace AdinersDailyActivityApp
                     this.Invoke(() => ShowNoUpdateDialog());
                 }
             });
+        }
+        
+        private async Task CheckClockifyOnStartup()
+        {
+            if (!IsClockifyConnected()) return;
+            
+            await Task.Delay(3000); // Wait for app to fully initialize
+            
+            try
+            {
+                // Get user ID first
+                var user = await clockifyService.GetCurrentUserAsync();
+                if (user == null) return;
+                
+                clockifyUserId = user.Id;
+                
+                // Check for running timer
+                var currentEntry = await clockifyService.GetCurrentTimeEntryAsync(config.ClockifyWorkspaceId, clockifyUserId);
+                if (currentEntry != null)
+                {
+                    this.Invoke(() => {
+                        // Auto-resume timer from Clockify
+                        currentClockifyTimeEntryId = currentEntry.Id;
+                        currentActivityDescription = currentEntry.Description ?? "Resumed Activity";
+                        currentActivityType = "";
+                        timerStartTime = DateTime.Now; // Start from now
+                        isTimerRunning = true;
+                        
+                        // Update UI
+                        btnStartStop.Text = "STOP";
+                        btnStartStop.BackColor = Color.FromArgb(220, 53, 69);
+                        
+                        UpdateTrayIcon();
+                        trayIcon.ShowBalloonTip(3000, "Timer Resumed", 
+                            $"Resumed running timer from Clockify: {currentActivityDescription}", 
+                            ToolTipIcon.Info);
+                    });
+                }
+            }
+            catch { /* Ignore startup check errors */ }
         }
         
         private async Task CheckForUpdatesOnStartup()
@@ -1720,6 +1771,16 @@ namespace AdinersDailyActivityApp
             {
                 StopTimer();
             }
+        }
+        
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            // Stop timer when application closes
+            if (isTimerRunning)
+            {
+                StopTimer();
+            }
+            base.OnFormClosed(e);
         }
         #endregion
 
@@ -2609,6 +2670,13 @@ namespace AdinersDailyActivityApp
                 {
                     AutoSplitAtMidnight();
                 }
+                
+                // Check if timer has been running for 24+ hours (Clockify limit)
+                var totalRunTime = now - timerStartTime;
+                if (totalRunTime.TotalHours >= 24)
+                {
+                    AutoBreakAt24Hours();
+                }
             }
             
             UpdateTrayIcon();
@@ -2814,6 +2882,48 @@ namespace AdinersDailyActivityApp
             trayIcon.ShowBalloonTip(3000, "Activity Auto-Split", 
                 $"Activity split at midnight: {durationStr} logged\nTimer continues for: {currentActivityDescription}", 
                 ToolTipIcon.Info);
+            
+            // Refresh history display
+            LoadLogHistory();
+        }
+        
+        private async void AutoBreakAt24Hours()
+        {
+            if (!isTimerRunning) return;
+            
+            DateTime now = DateTime.Now;
+            DateTime breakPoint = timerStartTime.AddHours(24); // Exactly 24 hours from start
+            
+            // Stop current Clockify timer first
+            await StopClockifyTimerAsync();
+            
+            // Save current activity up to 24-hour mark
+            string typePart = string.IsNullOrEmpty(currentActivityType) ? "" : $"{currentActivityType} | ";
+            string logEntry = $"[{breakPoint.ToString(CultureInfo.InvariantCulture)}] [LOCAL] {typePart}{currentActivityDescription} (24h auto-break)";
+            string logFilePath = GetLogFilePath();
+            File.AppendAllText(logFilePath, logEntry + Environment.NewLine);
+            
+            // Store current activity details for restart
+            string savedType = currentActivityType;
+            string savedDescription = currentActivityDescription;
+            
+            // Calculate duration for notification
+            var duration = breakPoint - timerStartTime;
+            string durationStr = $"{(int)duration.TotalHours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2}";
+            
+            // Show notification about 24-hour break
+            trayIcon.ShowBalloonTip(4000, "24-Hour Auto-Break", 
+                $"Timer auto-stopped after 24 hours: {durationStr}\nRestarting new timer for: {savedDescription}", 
+                ToolTipIcon.Info);
+            
+            // Restart timer with same activity from break point
+            currentActivityType = savedType;
+            currentActivityDescription = savedDescription;
+            timerStartTime = breakPoint;
+            currentClockifyTimeEntryId = "";
+            
+            // Start new Clockify timer
+            _ = StartClockifyTimerAsync(savedType, savedDescription);
             
             // Refresh history display
             LoadLogHistory();
